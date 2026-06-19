@@ -54,8 +54,8 @@ function sortText(text: string, languageId: string, indent: string): string | nu
             return sortJson(text, indent);
         } else if (languageId === 'yaml') {
             return sortYaml(text, indent);
-        } else if (languageId === 'properties' || languageId === 'env' || languageId === 'dotenv' || languageId === 'ignore') {
-            return sortProperties(text);
+        } else if (languageId === 'properties' || languageId === 'env' || languageId === 'dotenv' || languageId === 'ignore' || languageId === 'plaintext') {
+            return sortLines(text);
         }
     } catch (e) {
         console.error('Error sorting text:', e);
@@ -112,34 +112,9 @@ function sortYamlNode(node: any) {
     }
 }
 
-function sortProperties(text: string): string {
-    const lines = text.split(/\r?\n/);
-    const blocks: { key: string, lines: string[] }[] = [];
-    
-    let currentLines: string[] = [];
-    
-    for (const line of lines) {
-        const match = line.match(/^\s*([a-zA-Z0-9_.-]+)\s*[:=]/);
-        if (match) {
-            const key = match[1];
-            currentLines.push(line);
-            blocks.push({ key, lines: currentLines });
-            currentLines = [];
-        } else {
-            currentLines.push(line);
-        }
-    }
-    
-    const footer = currentLines;
-    
-    blocks.sort((a, b) => a.key.localeCompare(b.key));
-    
-    let resultLines: string[] = [];
-    for (const block of blocks) {
-        resultLines.push(...block.lines);
-    }
-    resultLines.push(...footer);
-    
+function sortLines(text: string): string {
     const newline = text.includes('\r\n') ? '\r\n' : '\n';
-    return resultLines.join(newline);
+    const lines = text.split(/\r?\n/);
+    lines.sort((a, b) => a.localeCompare(b));
+    return lines.join(newline);
 }

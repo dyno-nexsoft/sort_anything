@@ -31,7 +31,8 @@
     "onLanguage:properties",
     "onLanguage:env",
     "onLanguage:dotenv",
-    "onLanguage:ignore"
+    "onLanguage:ignore",
+    "onLanguage:plaintext"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -44,7 +45,21 @@
         "command": "sortAnything.sortSelection",
         "title": "Sort Anything: Sort Selection"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml || resourceLangId == properties || resourceLangId == env || resourceLangId == dotenv || resourceLangId == ignore || resourceLangId == plaintext",
+          "command": "sortAnything.sortDocument",
+          "group": "1_modification"
+        },
+        {
+          "when": "editorHasSelection && (resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml || resourceLangId == properties || resourceLangId == env || resourceLangId == dotenv || resourceLangId == ignore || resourceLangId == plaintext)",
+          "command": "sortAnything.sortSelection",
+          "group": "1_modification"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
