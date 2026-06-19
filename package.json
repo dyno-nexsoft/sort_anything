@@ -3,11 +3,12 @@
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON, YAML and other data files alphabetically",
   "version": "0.0.1",
-  "publisher": "your-name",
+  "publisher": "dyno-nexsoft",
+  "author": "Dyno Nexsoft",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-name/sort-anything"
+    "url": "https://github.com/dyno-nexsoft/sort_anything.git"
   },
   "keywords": [
     "sort",

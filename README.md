@@ -38,4 +38,4 @@ Currently, this extension uses your default VS Code indentation settings (Tabs o
 - Initial release with support for JSON, YAML, .env, .properties, and Plain Text.
 - Added Context Menu (Right-Click) support for quicker sorting.
 ---
-*Created with ❤️ by you!*
+*Created with ❤️ by [Dyno Nexsoft](https://github.com/dyno-nexsoft)* | [View Source on GitHub](https://github.com/dyno-nexsoft/sort_anything)
