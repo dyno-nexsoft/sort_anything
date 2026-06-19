@@ -1,0 +1,66 @@
+{
+  "name": "sort-anything",
+  "displayName": "Sort Anything",
+  "description": "Sort keys in JSON, YAML and other data files alphabetically",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-name/sort-anything"
+  },
+  "keywords": [
+    "sort",
+    "json",
+    "yaml",
+    "env",
+    "properties",
+    "format"
+  ],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Formatters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:json",
+    "onLanguage:jsonc",
+    "onLanguage:yaml",
+    "onLanguage:properties",
+    "onLanguage:env",
+    "onLanguage:dotenv",
+    "onLanguage:ignore"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sortAnything.sortDocument",
+        "title": "Sort Anything: Sort Document"
+      },
+      {
+        "command": "sortAnything.sortSelection",
+        "title": "Sort Anything: Sort Selection"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "package-to-desktop": "vsce package -o \"%USERPROFILE%\\Desktop\\sort-anything.vsix\""
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.2.0",
+    "yaml": "^2.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.1.3"
+  }
+}
