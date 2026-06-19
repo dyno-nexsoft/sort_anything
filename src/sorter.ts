@@ -1,23 +1,22 @@
 import * as vscode from 'vscode';
-import * as jsonc from 'jsonc-parser';
+import { parse as parseCommentJson, stringify as stringifyCommentJson } from 'comment-json';
 import * as yaml from 'yaml';
 import { getIndent } from './utils';
 
-function sortObjectKeys(obj: any): any {
-    if (obj === null || typeof obj !== 'object') {
-        return obj;
-    }
-
+function sortObjectKeysInPlace(obj: any) {
+    if (obj === null || typeof obj !== 'object') return;
     if (Array.isArray(obj)) {
-        return obj.map(sortObjectKeys);
+        obj.forEach(sortObjectKeysInPlace);
+        return;
     }
 
-    const sortedKeys = Object.keys(obj).sort();
-    const result: any = {};
-    for (const key of sortedKeys) {
-        result[key] = sortObjectKeys(obj[key]);
+    const keys = Object.keys(obj).sort();
+    for (const key of keys) {
+        const val = obj[key];
+        sortObjectKeysInPlace(val);
+        delete obj[key];
+        obj[key] = val; // Re-insert to change order while preserving comments
     }
-    return result;
 }
 
 export function sortDocument(document: vscode.TextDocument): vscode.TextEdit[] {
@@ -54,7 +53,9 @@ function sortText(text: string, languageId: string, indent: string): string | nu
             return sortJson(text, indent);
         } else if (languageId === 'yaml') {
             return sortYaml(text, indent);
-        } else if (languageId === 'properties' || languageId === 'env' || languageId === 'dotenv' || languageId === 'ignore' || languageId === 'plaintext') {
+        } else if (languageId === 'properties' || languageId === 'env' || languageId === 'dotenv') {
+            return sortProperties(text);
+        } else if (languageId === 'ignore' || languageId === 'plaintext') {
             return sortLines(text);
         }
     } catch (e) {
@@ -64,18 +65,21 @@ function sortText(text: string, languageId: string, indent: string): string | nu
 }
 
 function sortJson(text: string, indent: string): string {
-    const parsed = jsonc.parse(text);
-    if (parsed === undefined) return text;
-    
-    const sorted = sortObjectKeys(parsed);
-    
-    // For indent, try to determine if it's spaces or tabs
     let space: string | number = indent;
     if (indent.startsWith(' ')) {
         space = indent.length;
     }
-    
-    return JSON.stringify(sorted, null, space);
+
+    try {
+        const parsed = parseCommentJson(text);
+        if (parsed === undefined) return text;
+        
+        sortObjectKeysInPlace(parsed);
+        return stringifyCommentJson(parsed, null, space) as string;
+    } catch (e) {
+        console.error('JSON Parse error', e);
+        return text;
+    }
 }
 
 function sortYaml(text: string, indent: string): string {
@@ -110,6 +114,37 @@ function sortYamlNode(node: any) {
             sortYamlNode(item);
         }
     }
+}
+
+function sortProperties(text: string): string {
+    const lines = text.split(/\r?\n/);
+    const blocks: { key: string, lines: string[] }[] = [];
+    
+    let currentLines: string[] = [];
+    
+    for (const line of lines) {
+        const match = line.match(/^\s*([a-zA-Z0-9_.-]+)\s*[:=]/);
+        if (match) {
+            const key = match[1];
+            currentLines.push(line);
+            blocks.push({ key, lines: currentLines });
+            currentLines = [];
+        } else {
+            currentLines.push(line);
+        }
+    }
+    
+    const footer = currentLines;
+    blocks.sort((a, b) => a.key.localeCompare(b.key));
+    
+    let resultLines: string[] = [];
+    for (const block of blocks) {
+        resultLines.push(...block.lines);
+    }
+    resultLines.push(...footer);
+    
+    const newline = text.includes('\r\n') ? '\r\n' : '\n';
+    return resultLines.join(newline);
 }
 
 function sortLines(text: string): string {

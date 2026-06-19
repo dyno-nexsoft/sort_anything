@@ -2,7 +2,7 @@
   "name": "sort-anything",
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON, YAML and other data files alphabetically",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -70,7 +70,7 @@
     "package-to-desktop": "vsce package -o \"%USERPROFILE%\\Desktop\\sort-anything.vsix\""
   },
   "dependencies": {
-    "jsonc-parser": "^3.2.0",
+    "comment-json": "^4.2.3",
     "yaml": "^2.3.1"
   },
   "devDependencies": {
