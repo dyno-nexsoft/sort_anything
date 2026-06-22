@@ -2,15 +2,18 @@ import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Extension "sort-anything" is now active!');
-
     const sortDocumentDisposable = vscode.commands.registerTextEditorCommand(
         'sortAnything.sortDocument',
         (textEditor, edit) => {
             const edits = sortDocument(textEditor.document);
+            if (edits.length === 0) {
+                vscode.window.setStatusBarMessage('$(check) Sort Anything: Already sorted or nothing to sort.', 3000);
+                return;
+            }
             for (const textEdit of edits) {
                 edit.replace(textEdit.range, textEdit.newText);
             }
+            vscode.window.setStatusBarMessage('$(check) Sort Anything: Document sorted!', 3000);
         }
     );
 
@@ -18,9 +21,14 @@ export function activate(context: vscode.ExtensionContext) {
         'sortAnything.sortSelection',
         (textEditor, edit) => {
             const edits = sortSelection(textEditor.document, textEditor.selection);
+            if (edits.length === 0) {
+                vscode.window.setStatusBarMessage('$(check) Sort Anything: Already sorted or nothing to sort.', 3000);
+                return;
+            }
             for (const textEdit of edits) {
                 edit.replace(textEdit.range, textEdit.newText);
             }
+            vscode.window.setStatusBarMessage('$(check) Sort Anything: Selection sorted!', 3000);
         }
     );
 

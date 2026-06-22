@@ -2,7 +2,7 @@
   "name": "sort-anything",
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON, YAML and other data files alphabetically",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -77,7 +77,6 @@
     "@types/node": "18.x",
     "@types/vscode": "^1.80.0",
     "@vscode/vsce": "^3.9.2",
-    "jimp": "^1.6.1",
     "typescript": "^5.1.3"
   }
 }
