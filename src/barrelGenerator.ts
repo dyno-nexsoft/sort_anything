@@ -83,14 +83,7 @@ export async function generateBarrelFile(folderUri: vscode.Uri): Promise<void> {
         })
         .sort((a, b) => a.localeCompare(b));
 
-    // Build file content with a header comment
-    const content = [
-        `// GENERATED FILE — do not edit by hand.`,
-        `// Run "Generate Dart Barrel File" to regenerate.`,
-        ``,
-        ...exportLines,
-        ``, // trailing newline
-    ].join('\n');
+    const content = [...exportLines, ``].join('\n');
 
     await fs.writeFile(barrelFilePath, content, 'utf-8');
 
