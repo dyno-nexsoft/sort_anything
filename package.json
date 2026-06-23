@@ -2,7 +2,7 @@
   "name": "sort-anything",
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON, YAML and other data files alphabetically",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -33,7 +33,8 @@
     "onLanguage:env",
     "onLanguage:dotenv",
     "onLanguage:ignore",
-    "onLanguage:plaintext"
+    "onLanguage:plaintext",
+    "onCommand:sortAnything.generateDartBarrel"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -45,6 +46,11 @@
       {
         "command": "sortAnything.sortSelection",
         "title": "Sort Anything: Sort Selection"
+      },
+      {
+        "command": "sortAnything.generateDartBarrel",
+        "title": "Generate Dart Barrel File",
+        "icon": "$(file-code)"
       }
     ],
     "menus": {
@@ -58,6 +64,13 @@
           "when": "editorHasSelection && (resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml || resourceLangId == properties || resourceLangId == env || resourceLangId == dotenv || resourceLangId == ignore || resourceLangId == plaintext)",
           "command": "sortAnything.sortSelection",
           "group": "1_modification"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "explorerResourceIsFolder",
+          "command": "sortAnything.generateDartBarrel",
+          "group": "2_workspace@1"
         }
       ]
     }

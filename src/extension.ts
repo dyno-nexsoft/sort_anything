@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
+import { generateBarrelFile } from './barrelGenerator';
 
 export function activate(context: vscode.ExtensionContext) {
     const sortDocumentDisposable = vscode.commands.registerTextEditorCommand(
@@ -32,7 +33,28 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(sortDocumentDisposable, sortSelectionDisposable);
+    const generateBarrelDisposable = vscode.commands.registerCommand(
+        'sortAnything.generateDartBarrel',
+        async (folderUri: vscode.Uri) => {
+            // Fallback: use the workspace folder if called from command palette
+            const targetUri = folderUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+            if (!targetUri) {
+                vscode.window.showErrorMessage('Sort Anything: No folder selected.');
+                return;
+            }
+            try {
+                await generateBarrelFile(targetUri);
+            } catch (e) {
+                vscode.window.showErrorMessage(`Sort Anything: ${(e as Error).message}`);
+            }
+        }
+    );
+
+    context.subscriptions.push(
+        sortDocumentDisposable,
+        sortSelectionDisposable,
+        generateBarrelDisposable
+    );
 }
 
 export function deactivate() {}
