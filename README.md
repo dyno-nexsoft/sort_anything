@@ -59,22 +59,7 @@ This extension uses your default VS Code indentation settings (Tabs or Spaces) t
 
 ## Release Notes
 
-### 0.0.6
-- Removed generated header comment from Dart barrel files for a cleaner output.
-
-### 0.0.5
-- Added **Dart Barrel File Generator** via Explorer right-click context menu.
-- Barrel file is named `<folder_name>.dart`, sorted, and overwrites existing file.
-
-### 0.0.4
-- Fixed JSONC comment preservation using `comment-json` library.
-- Fixed `.env` multiline value handling.
-- Fixed trailing blank lines being sorted to the top in plain text files.
-- Added status bar feedback messages.
-
-### 0.0.1 – 0.0.3
-- Initial release with JSON, YAML, .env, .properties, and Plain Text sorting.
-- Added Right-Click context menu support.
+See the [CHANGELOG.md](CHANGELOG.md) for all release notes and version history.
 
 ---
 *Created with ❤️ by [Dyno Nexsoft](https://github.com/dyno-nexsoft)* | [View Source on GitHub](https://github.com/dyno-nexsoft/sort_anything)
