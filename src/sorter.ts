@@ -122,14 +122,14 @@ function sortYamlNode(node: yaml.Node | null): void {
         });
         for (const item of node.items) {
             const val = item.value;
-            if (val && typeof val === 'object' && 'type' in val) {
-                sortYamlNode(val as yaml.Node);
+            if (yaml.isNode(val)) {
+                sortYamlNode(val);
             }
         }
     } else if (yaml.isSeq(node)) {
         for (const item of node.items) {
-            if (item && typeof item === 'object' && 'type' in (item as object)) {
-                sortYamlNode(item as yaml.Node);
+            if (yaml.isNode(item)) {
+                sortYamlNode(item);
             }
         }
     }

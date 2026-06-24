@@ -2,7 +2,7 @@
   "name": "sort-anything",
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON, YAML and other data files alphabetically",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",

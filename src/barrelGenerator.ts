@@ -81,7 +81,7 @@ export async function generateBarrelFile(folderUri: vscode.Uri): Promise<void> {
             const relativePath = path.relative(folderPath, filePath).replace(/\\/g, '/');
             return `export '${relativePath}';`;
         })
-        .sort((a, b) => a.localeCompare(b));
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
     const content = [...exportLines, ``].join('\n');
 
