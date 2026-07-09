@@ -175,9 +175,20 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
 
     try {
         const prompt = buildPrompt(diff);
-        const message = provider === 'ollama'
-            ? await callOllama(prompt)
-            : await callGemini(prompt);
+        
+        // Show progress spinner in the bottom right toast notification
+        const message = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Sort Anything: Generating commit message with ${label}...`,
+                cancellable: false,
+            },
+            async () => {
+                return provider === 'ollama'
+                    ? await callOllama(prompt)
+                    : await callGemini(prompt);
+            }
+        );
 
         // Insert final message
         inputBox.value = message;
