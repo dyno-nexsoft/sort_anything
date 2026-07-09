@@ -87,7 +87,7 @@ export 'user.dart';
 |---|---|---|
 | `sortAnything.aiProvider` | `"gemini"` | Default AI provider (`gemini` or `ollama`) |
 | `sortAnything.geminiApiKey` | `""` | Your Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey) |
-| `sortAnything.geminiModel` | `"gemini-1.5-flash"` | Gemini model to use (e.g., `gemini-1.5-pro`, `gemini-2.0-flash`) |
+| `sortAnything.geminiModel` | `"gemini-3.5-flash"` | Gemini model to use (e.g., `gemini-3.5-flash`, `gemini-3.1-flash-lite`) |
 | `sortAnything.ollamaEndpoint` | `"http://localhost:11434"` | Ollama server endpoint |
 | `sortAnything.ollamaModel` | `"llama3"` | Ollama model to use (e.g., `mistral`, `codellama`) |
 

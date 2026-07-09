@@ -102,8 +102,8 @@
         },
         "sortAnything.geminiModel": {
           "type": "string",
-          "default": "gemini-1.5-flash",
-          "description": "Model Gemini (e.g. gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)."
+          "default": "gemini-3.5-flash",
+          "description": "Model Gemini (e.g. gemini-3.5-flash, gemini-3.1-flash-lite)."
         },
         "sortAnything.ollamaEndpoint": {
           "type": "string",
