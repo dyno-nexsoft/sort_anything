@@ -148,60 +148,45 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
         return;
     }
 
+    // 2. Lấy Git extension API
+    const gitExtension = vscode.extensions.getExtension<{
+        getAPI(version: number): {
+            repositories: { inputBox: { value: string } }[];
+        };
+    }>('vscode.git');
+
+    if (!gitExtension) {
+        vscode.window.showErrorMessage('Sort Anything: Không tìm thấy Git extension của VS Code.');
+        return;
+    }
+
+    const git = gitExtension.exports.getAPI(1);
+    if (git.repositories.length === 0) {
+        vscode.window.showErrorMessage('Sort Anything: Không tìm thấy Git repository đang hoạt động.');
+        return;
+    }
+
+    const inputBox = git.repositories[0].inputBox;
+    const originalValue = inputBox.value;
     const label = provider === 'gemini' ? 'Gemini' : 'Ollama';
 
-    await vscode.window.withProgress(
-        {
-            location: vscode.ProgressLocation.Notification,
-            title: `Sort Anything: Đang gen commit message với ${label}...`,
-            cancellable: false,
-        },
-        async () => {
-            let message: string;
-            try {
-                const prompt = buildPrompt(diff);
-                message = provider === 'ollama'
-                    ? await callOllama(prompt)
-                    : await callGemini(prompt);
-            } catch (err) {
-                vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
-                return;
-            }
+    // 3. Set text chờ trực tiếp trong Git Input Box (giống Copilot)
+    inputBox.value = `[Generating commit message with ${label}... \u23F3]`;
 
-            // 2. Hiển thị input box để review/edit
-            const edited = await vscode.window.showInputBox({
-                title: `Sort Anything — Commit Message (${label})`,
-                prompt: 'Review và chỉnh sửa nếu cần, rồi nhấn Enter để điền vào Git.',
-                value: message,
-                ignoreFocusOut: true,
-                placeHolder: 'feat: your commit message',
-            });
+    try {
+        const prompt = buildPrompt(diff);
+        const message = provider === 'ollama'
+            ? await callOllama(prompt)
+            : await callGemini(prompt);
 
-            if (edited === undefined) { return; } // Escape → hủy
-
-            // 3. Điền vào SCM input box
-            const gitExtension = vscode.extensions.getExtension<{
-                getAPI(version: number): {
-                    repositories: { inputBox: { value: string } }[];
-                };
-            }>('vscode.git');
-
-            if (gitExtension) {
-                const git = gitExtension.exports.getAPI(1);
-                if (git.repositories.length > 0) {
-                    git.repositories[0].inputBox.value = edited;
-                    vscode.window.setStatusBarMessage('$(check) Sort Anything: Commit message đã được điền!', 4000);
-                    return;
-                }
-            }
-
-            // Fallback: copy vào clipboard
-            await vscode.env.clipboard.writeText(edited);
-            vscode.window.showInformationMessage(
-                'Sort Anything: Đã copy commit message vào clipboard.'
-            );
-        }
-    );
+        // Điền thẳng commit message vào ô nhập liệu
+        inputBox.value = message;
+        vscode.window.setStatusBarMessage(`$(check) Sort Anything: Đã điền commit message từ ${label}!`, 4000);
+    } catch (err) {
+        // Trả lại text ban đầu của user nếu lỗi xảy ra
+        inputBox.value = originalValue;
+        vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+    }
 }
 
 // ---------------------------------------------------------------------------

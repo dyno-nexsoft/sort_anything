@@ -64,7 +64,8 @@
 4. Select a provider from the dropdown:
    - **Gemini** — requires an API key (see configuration below).
    - **Ollama** — requires Ollama running locally (`ollama serve`).
-5. Review and edit the suggested message, then press **Enter** to apply it.
+5. A loading indicator `[Generating commit message...]` will appear directly inside the input box.
+6. Once ready, the generated commit message is filled **directly** into the Git input box for you to review, edit, or commit.
 
 ### Generate Dart Barrel File
 1. **Right-click a folder** in the VS Code Explorer.
