@@ -94,10 +94,10 @@ async function callGemini(prompt: string): Promise<string> {
 // Ollama provider
 // ---------------------------------------------------------------------------
 
-async function callOllama(prompt: string): Promise<string> {
+async function callOllama(prompt: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const endpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
-    const model = config.get<string>('ollamaModel', 'llama3').trim();
+    const model = (overrideModel || config.get<string>('ollamaModel', 'llama3')).trim();
 
     const url = `${endpoint}/api/generate`;
     const body = { model, prompt, stream: false, options: { temperature: 0.3 } };
@@ -131,7 +131,7 @@ async function callOllama(prompt: string): Promise<string> {
 // Core: generate with a specific provider
 // ---------------------------------------------------------------------------
 
-async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
+async function runGeneration(provider: 'gemini' | 'ollama', selectedOllamaModel?: string): Promise<void> {
     // 1. Get git diff
     let diff: string;
     try {
@@ -185,7 +185,7 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
             },
             async () => {
                 return provider === 'ollama'
-                    ? await callOllama(prompt)
+                    ? await callOllama(prompt, selectedOllamaModel)
                     : await callGemini(prompt);
             }
         );
@@ -324,10 +324,12 @@ export async function generateCommitMessage(): Promise<void> {
         // Update settings and provider
         await config.update('ollamaModel', pickedModel.label, vscode.ConfigurationTarget.Global);
         await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
+        
+        await runGeneration('ollama', pickedModel.label);
     } else {
         // Set default provider to Gemini
         await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
+        
+        await runGeneration('gemini');
     }
-
-    await runGeneration(picked.action);
 }
