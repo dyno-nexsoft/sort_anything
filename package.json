@@ -1,8 +1,8 @@
 {
   "name": "sort-anything",
   "displayName": "Sort Anything",
-  "description": "Sort keys in JSON, YAML and other data files alphabetically",
-  "version": "0.0.8",
+  "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
+  "version": "0.0.9",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -34,7 +34,8 @@
     "onLanguage:dotenv",
     "onLanguage:ignore",
     "onLanguage:plaintext",
-    "onCommand:sortAnything.generateDartBarrel"
+    "onCommand:sortAnything.generateDartBarrel",
+    "onCommand:sortAnything.generateCommitMessage"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -51,6 +52,11 @@
         "command": "sortAnything.generateDartBarrel",
         "title": "Generate Dart Barrel File",
         "icon": "$(file-code)"
+      },
+      {
+        "command": "sortAnything.generateCommitMessage",
+        "title": "Generate Commit Message with AI",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -72,7 +78,44 @@
           "command": "sortAnything.generateDartBarrel",
           "group": "2_workspace@1"
         }
+      ],
+      "scm/inputBox": [
+        {
+          "command": "sortAnything.generateCommitMessage",
+          "group": "navigation"
+        }
       ]
+    },
+    "configuration": {
+      "title": "Sort Anything",
+      "properties": {
+        "sortAnything.aiProvider": {
+          "type": "string",
+          "enum": ["gemini", "ollama"],
+          "default": "gemini",
+          "description": "AI provider để gen commit message."
+        },
+        "sortAnything.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Gemini API Key. Lấy tại [Google AI Studio](https://aistudio.google.com/apikey)."
+        },
+        "sortAnything.geminiModel": {
+          "type": "string",
+          "default": "gemini-2.0-flash",
+          "description": "Model Gemini (e.g. gemini-2.0-flash, gemini-1.5-pro)."
+        },
+        "sortAnything.ollamaEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Endpoint của Ollama server."
+        },
+        "sortAnything.ollamaModel": {
+          "type": "string",
+          "default": "llama3",
+          "description": "Model Ollama (e.g. llama3, mistral, codellama)."
+        }
+      }
     }
   },
   "scripts": {

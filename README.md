@@ -1,7 +1,7 @@
 <div align="center">
   <img src="icon.png" width="128" height="128" alt="Sort Anything Icon" />
   <h1>Sort Anything</h1>
-  <p>A simple, yet powerful VS Code extension to sort data files and generate Dart barrel files.</p>
+  <p>A powerful VS Code extension to sort data files, generate Dart barrel files, and craft AI-powered commit messages.</p>
 </div>
 
 ## Features
@@ -15,12 +15,25 @@
 - **ENV block sorting**: Sorts `.env` / `.properties` files while keeping `#` comments attached to their keys.
 - **Line Sorting**: Sorts plain text files line-by-line.
 
+### ✨ AI Commit Message Generator
+- **One-click generation** from the Source Control commit input box.
+- **Choose your AI provider** via a dropdown menu — similar to GitLens:
+  - `✨ Generate Commit Message with Gemini` — uses Google Gemini API (cloud)
+  - `🤖 Generate Commit Message with Ollama` — uses a local Ollama model (private, no API key)
+  - `⚙️ Switch AI Provider / Configure...` — opens Settings
+- Generates messages following **Conventional Commits** format (`feat:`, `fix:`, `chore:`, etc.)
+- Reads only your **staged changes** (`git diff --staged`) — unstaged files are never sent.
+- Lets you **review and edit** the message before it is applied.
+- Automatically fills the message into the **Git SCM input box**.
+
 ### 🎯 Dart Barrel File Generator
 - **Right-click any folder** in the Explorer → **"Generate Dart Barrel File"**
 - Recursively scans all `.dart` files in the folder and sub-folders.
 - Automatically skips `part of` files (they cannot be independently exported).
 - Generates a `<folder_name>.dart` barrel file with sorted `export` statements.
 - Overwrites the existing barrel file to keep it in sync with the folder.
+
+---
 
 ## Supported Formats
 
@@ -30,16 +43,28 @@
 | `YAML` | Sort keys, preserve comments & structure |
 | `.env` / `dotenv` | Sort keys, keep comment blocks attached |
 | `.properties` | Sort keys, keep comment blocks attached |
-| `Plain Text` (.txt, etc.) | Sort lines A-Z |
+| `Plain Text` (.txt, etc.) | Sort lines A–Z |
 | `Dart` folders | Generate barrel file |
+| Any `git` repo | AI commit message generation |
 
-## How to use
+---
+
+## How to Use
 
 ### Sort a file
 1. Open a supported file (e.g., `data.json`, `config.yaml`, `.env`).
 2. **Right-Click** anywhere in the file → **"Sort Anything: Sort Document"**.
 3. To sort a specific section, highlight text → **Right-Click** → **"Sort Anything: Sort Selection"**.
 4. *(Alternatively: Command Palette `Ctrl+Shift+P` / `Cmd+Shift+P`)*
+
+### Generate AI Commit Message
+1. Stage your changes with `git add`.
+2. Open the **Source Control** panel (`Ctrl+Shift+G`).
+3. Click the **✨ sparkle icon** next to the commit message input box.
+4. Select a provider from the dropdown:
+   - **Gemini** — requires an API key (see configuration below).
+   - **Ollama** — requires Ollama running locally (`ollama serve`).
+5. Review and edit the suggested message, then press **Enter** to apply it.
 
 ### Generate Dart Barrel File
 1. **Right-click a folder** in the VS Code Explorer.
@@ -53,9 +78,21 @@ export 'sub/category.dart';
 export 'user.dart';
 ```
 
+---
+
 ## Extension Settings
 
-This extension uses your default VS Code indentation settings (Tabs or Spaces) to format the output.
+| Setting | Default | Description |
+|---|---|---|
+| `sortAnything.aiProvider` | `"gemini"` | Default AI provider (`gemini` or `ollama`) |
+| `sortAnything.geminiApiKey` | `""` | Your Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `sortAnything.geminiModel` | `"gemini-2.0-flash"` | Gemini model to use (e.g., `gemini-1.5-pro`) |
+| `sortAnything.ollamaEndpoint` | `"http://localhost:11434"` | Ollama server endpoint |
+| `sortAnything.ollamaModel` | `"llama3"` | Ollama model to use (e.g., `mistral`, `codellama`) |
+
+> **Tip:** You can open settings directly from the **⚙️ Switch AI Provider / Configure...** option in the commit message dropdown.
+
+---
 
 ## Release Notes
 

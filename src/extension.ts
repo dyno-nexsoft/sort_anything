@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
 import { generateBarrelFile } from './barrelGenerator';
+import { generateCommitMessage } from './commitGenerator';
 
 export function activate(context: vscode.ExtensionContext) {
     const sortDocumentDisposable = vscode.commands.registerTextEditorCommand(
@@ -50,10 +51,18 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const generateCommitDisposable = vscode.commands.registerCommand(
+        'sortAnything.generateCommitMessage',
+        async () => {
+            await generateCommitMessage();
+        }
+    );
+
     context.subscriptions.push(
         sortDocumentDisposable,
         sortSelectionDisposable,
-        generateBarrelDisposable
+        generateBarrelDisposable,
+        generateCommitDisposable
     );
 }
 
