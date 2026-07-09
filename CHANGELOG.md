@@ -2,7 +2,16 @@
 
 All notable changes to the "Sort Anything" extension will be documented in this file.
 
-## [0.0.5] - [0.0.7]
+## [0.1.0] - 2026-07-09
+- Added **AI Commit Message Generator** featuring:
+  - Stable `scm/title` menu integration (✨ sparkle icon on SCM title bar).
+  - Dynamic Gemini model selection from Google API (defaults to `gemini-3.5-flash`).
+  - Dynamic local/remote Ollama model selection via `/api/tags` endpoint.
+  - Natural, concise commit messages (auto-formatted single-line for simple changes, bullet points for complex ones).
+  - Integrated dedicated Output Channel logging for easy troubleshooting and log retrieval.
+  - Full support for Remote SSH, WSL, and Dev Containers.
+
+## [0.0.5] - [0.0.8]
 - Added **Dart Barrel File Generator** via Explorer right-click context menu.
 - Barrel file is named `<folder_name>.dart`, sorted, and overwrites existing file without a generated header comment.
 - Extracted release notes from README into a dedicated CHANGELOG.md file.

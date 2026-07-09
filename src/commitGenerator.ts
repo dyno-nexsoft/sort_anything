@@ -209,11 +209,7 @@ async function runGeneration(
     }
 
     const inputBox = git.repositories[0].inputBox;
-    const originalValue = inputBox.value;
     const label = provider === 'gemini' ? 'Gemini' : 'Ollama';
-
-    // 3. Write loading indicator directly into SCM input box
-    inputBox.value = `[Generating commit message with ${label}... \u23F3]`;
 
     try {
         const prompt = buildPrompt(diff);
@@ -236,9 +232,6 @@ async function runGeneration(
         inputBox.value = message;
         vscode.window.setStatusBarMessage(`$(check) Sort Anything: Commit message populated from ${label}!`, 4000);
     } catch (err) {
-        // Restore user's previous input on error
-        inputBox.value = originalValue;
-        
         logError(err, `Failed to generate commit message with ${label}`);
         
         const action = await vscode.window.showErrorMessage(

@@ -2,7 +2,7 @@
   "name": "sort-anything",
   "displayName": "Sort Anything",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",

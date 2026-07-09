@@ -34,11 +34,11 @@ sort_anything/
 
 ## 🚀 Useful Commands
 
-| Lệnh | Mục đích |
-|---|---|
-| `cmd /c npm run compile` | Compile TypeScript, kiểm tra lỗi |
-| `cmd /c npm run package-to-desktop` | Build `.vsix` ra Desktop |
-| `cmd /c npm run watch` | Watch mode khi đang dev |
+| Lệnh                                | Mục đích                         |
+| ----------------------------------- | -------------------------------- |
+| `cmd /c npm run compile`            | Compile TypeScript, kiểm tra lỗi |
+| `cmd /c npm run package-to-desktop` | Build `.vsix` ra Desktop         |
+| `cmd /c npm run watch`              | Watch mode khi đang dev          |
 
 > [!WARNING]
 > Dùng `cmd /c` thay vì chạy thẳng `npm` vì PowerShell trên máy này bị giới hạn execution policy.
