@@ -58,7 +58,7 @@ async function callGemini(prompt: string): Promise<string> {
             'Open Settings'
         );
         if (action === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything.geminiApiKey');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
         }
         throw new Error('Gemini API Key missing — operation cancelled.');
     }
@@ -191,8 +191,7 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
             'Open Settings'
         );
         if (action === 'Open Settings') {
-            const targetSetting = provider === 'ollama' ? 'sortAnything.ollamaEndpoint' : 'sortAnything.geminiApiKey';
-            vscode.commands.executeCommand('workbench.action.openSettings', targetSetting);
+            vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
         }
     }
 }
@@ -298,7 +297,7 @@ export async function generateCommitMessage(): Promise<void> {
                 'Open Settings'
             );
             if (action === 'Open Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything.ollamaEndpoint');
+                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
             }
             return;
         }
