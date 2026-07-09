@@ -29,14 +29,15 @@ function getGitDiff(): string {
 // ---------------------------------------------------------------------------
 
 function buildPrompt(diff: string): string {
-    return `You are a senior software engineer. Based on the following git diff, write a concise and descriptive commit message following Conventional Commits format (e.g., feat:, fix:, refactor:, chore:, docs:, style:, test:, build:, ci:, perf:).
+    return `You are a senior software engineer. Based on the following git diff, write a concise and professional commit message following Conventional Commits format (e.g., feat:, fix:, refactor:, chore:, docs:, style:, test:, build:, ci:, perf:).
 
 Rules:
-- Output ONLY the commit message text, nothing else.
-- No backticks, no markdown, no explanation.
-- Keep the subject line under 72 characters.
-- Use imperative mood (e.g., "add", "fix", "update" — not "added", "fixed").
-- If there are multiple changes, use a short subject + bullet body separated by a blank line.
+- Output ONLY the raw commit message text, nothing else. Do not wrap in quotes, backticks, or code blocks.
+- Use imperative mood (e.g., "add", "fix", "update" — not "added", "fixed", "updates").
+- Keep the subject line (first line) under 72 characters.
+- Write a SINGLE-LINE message for simple, small, or single-topic changes (e.g., "docs: update README").
+- Use a MULTI-LINE message (short subject line + blank line + bulleted body) ONLY for large, complex changes with multiple distinct tasks.
+- Keep it natural, clean, and developer-friendly. Avoid repeating obvious file names in bullet points if it's already clear.
 
 Git diff:
 \`\`\`
