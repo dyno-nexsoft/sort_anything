@@ -185,7 +185,15 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
     } catch (err) {
         // Trả lại text ban đầu của user nếu lỗi xảy ra
         inputBox.value = originalValue;
-        vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+        
+        const action = await vscode.window.showErrorMessage(
+            `Sort Anything: ${(err as Error).message}`,
+            'Mở Settings'
+        );
+        if (action === 'Mở Settings') {
+            const targetSetting = provider === 'ollama' ? 'sortAnything.ollamaEndpoint' : 'sortAnything.geminiApiKey';
+            vscode.commands.executeCommand('workbench.action.openSettings', targetSetting);
+        }
     }
 }
 
@@ -289,7 +297,13 @@ export async function generateCommitMessage(): Promise<void> {
                 () => getOllamaModels(ollamaEndpoint)
             );
         } catch (err) {
-            vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+            const action = await vscode.window.showErrorMessage(
+                `Sort Anything: ${(err as Error).message}`,
+                'Mở Settings'
+            );
+            if (action === 'Mở Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything.ollamaEndpoint');
+            }
             return;
         }
 
