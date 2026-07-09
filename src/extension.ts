@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
 import { generateBarrelFile } from './barrelGenerator';
 import { generateCommitMessage } from './commitGenerator';
+import { logInfo } from './utils';
 
 export function activate(context: vscode.ExtensionContext) {
+    logInfo('Sort Anything extension activated successfully.');
     const sortDocumentDisposable = vscode.commands.registerTextEditorCommand(
         'sortAnything.sortDocument',
         (textEditor, edit) => {
