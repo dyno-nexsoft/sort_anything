@@ -6,16 +6,7 @@ import { logError, logInfo } from './utils';
 // Git diff helper
 // ---------------------------------------------------------------------------
 
-function getWorkspaceRoot(): string {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) {
-        throw new Error('Workspace not found. Please open a folder/project first.');
-    }
-    return folders[0].uri.fsPath;
-}
-
-function getGitDiff(): string {
-    const cwd = getWorkspaceRoot();
+function getGitDiff(cwd: string): string {
     try {
         const diff = execSync('git diff --staged', { cwd, encoding: 'utf-8' });
         return diff.trim();
@@ -174,26 +165,13 @@ async function runGeneration(
     provider: 'gemini' | 'ollama',
     selectedModel?: string
 ): Promise<void> {
-    // 1. Get git diff
-    let diff: string;
-    try {
-        diff = getGitDiff();
-    } catch (err) {
-        vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
-        return;
-    }
-
-    if (!diff) {
-        vscode.window.showWarningMessage(
-            'Sort Anything: No staged changes found. Please run "git add" first.'
-        );
-        return;
-    }
-
-    // 2. Access Git extension API
+    // 1. Access Git extension API
     const gitExtension = vscode.extensions.getExtension<{
         getAPI(version: number): {
-            repositories: { inputBox: { value: string } }[];
+            repositories: {
+                rootUri: vscode.Uri;
+                inputBox: { value: string };
+            }[];
         };
     }>('vscode.git');
 
@@ -208,7 +186,48 @@ async function runGeneration(
         return;
     }
 
-    const inputBox = git.repositories[0].inputBox;
+    let selectedRepo = git.repositories[0];
+
+    // 2. If multiple repos, prompt user to select one
+    if (git.repositories.length > 1) {
+        const repoItems = git.repositories.map(repo => {
+            const folderName = repo.rootUri.fsPath.split(/[\\/]/).pop() || repo.rootUri.fsPath;
+            return {
+                label: `$(repo) ${folderName}`,
+                description: repo.rootUri.fsPath,
+                repo: repo
+            };
+        });
+
+        const pickedRepo = await vscode.window.showQuickPick(repoItems, {
+            title: 'Sort Anything — Select Git Repository',
+            placeHolder: 'Select the repository to generate a commit message for',
+            matchOnDescription: true,
+        });
+
+        if (!pickedRepo) {
+            return; // user cancelled
+        }
+        selectedRepo = pickedRepo.repo;
+    }
+
+    // 3. Get git diff for selected repo
+    let diff: string;
+    try {
+        diff = getGitDiff(selectedRepo.rootUri.fsPath);
+    } catch (err) {
+        vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+        return;
+    }
+
+    if (!diff) {
+        vscode.window.showWarningMessage(
+            'Sort Anything: No staged changes found. Please run "git add" first.'
+        );
+        return;
+    }
+
+    const inputBox = selectedRepo.inputBox;
     const label = provider === 'gemini' ? 'Gemini' : 'Ollama';
 
     try {
@@ -287,6 +306,9 @@ async function getOllamaModels(endpoint: string): Promise<vscode.QuickPickItem[]
 // Main export — QuickPick entry point
 // ---------------------------------------------------------------------------
 
+let sessionGeminiModel: string | undefined;
+let sessionOllamaModel: string | undefined;
+
 export async function generateCommitMessage(context: vscode.ExtensionContext): Promise<void> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const currentProvider = config.get<string>('aiProvider', 'gemini');
@@ -343,80 +365,92 @@ export async function generateCommitMessage(context: vscode.ExtensionContext): P
             return;
         }
 
-        // Fetch Gemini models
-        let modelItems: vscode.QuickPickItem[];
-        try {
-            modelItems = await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: 'Sort Anything: Fetching model list from Gemini...',
-                    cancellable: false,
-                },
-                () => getGeminiModels(geminiApiKey)
-            );
-        } catch (err) {
-            logError(err, 'Failed to fetch models from Gemini');
-            const action = await vscode.window.showErrorMessage(
-                `Sort Anything: ${(err as Error).message}`,
-                'Open Settings'
-            );
-            if (action === 'Open Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+        let targetModel = sessionGeminiModel;
+
+        if (!targetModel) {
+            // Fetch Gemini models
+            let modelItems: vscode.QuickPickItem[];
+            try {
+                modelItems = await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: 'Sort Anything: Fetching model list from Gemini...',
+                        cancellable: false,
+                    },
+                    () => getGeminiModels(geminiApiKey)
+                );
+            } catch (err) {
+                logError(err, 'Failed to fetch models from Gemini');
+                const action = await vscode.window.showErrorMessage(
+                    `Sort Anything: ${(err as Error).message}`,
+                    'Open Settings'
+                );
+                if (action === 'Open Settings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+                }
+                return;
             }
-            return;
+
+            const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                title: 'Sort Anything — Select Gemini Model',
+                placeHolder: 'Select a Gemini model',
+                matchOnDescription: true,
+            });
+
+            if (!pickedModel) { return; } // Cancelled
+
+            targetModel = pickedModel.label;
+            sessionGeminiModel = targetModel;
+            // Save last used model in globalState and update provider in settings
+            await context.globalState.update('lastGeminiModel', targetModel);
         }
 
-        const pickedModel = await vscode.window.showQuickPick(modelItems, {
-            title: 'Sort Anything — Select Gemini Model',
-            placeHolder: 'Select a Gemini model',
-            matchOnDescription: true,
-        });
-
-        if (!pickedModel) { return; } // Cancelled
-
-        // Save last used model in globalState and update provider in settings
-        await context.globalState.update('lastGeminiModel', pickedModel.label);
         await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
-        
-        await runGeneration('gemini', pickedModel.label);
+        await runGeneration('gemini', targetModel);
 
     } else if (picked.action === 'ollama') {
-        // Step to choose installed model from local Ollama
-        let modelItems: vscode.QuickPickItem[];
-        try {
-            modelItems = await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: 'Sort Anything: Fetching model list from Ollama...',
-                    cancellable: false,
-                },
-                () => getOllamaModels(ollamaEndpoint)
-            );
-        } catch (err) {
-            logError(err, 'Failed to fetch models from Ollama');
-            
-            const action = await vscode.window.showErrorMessage(
-                `Sort Anything: ${(err as Error).message}`,
-                'Open Settings'
-            );
-            if (action === 'Open Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+        let targetModel = sessionOllamaModel;
+
+        if (!targetModel) {
+            // Step to choose installed model from local Ollama
+            let modelItems: vscode.QuickPickItem[];
+            try {
+                modelItems = await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: 'Sort Anything: Fetching model list from Ollama...',
+                        cancellable: false,
+                    },
+                    () => getOllamaModels(ollamaEndpoint)
+                );
+            } catch (err) {
+                logError(err, 'Failed to fetch models from Ollama');
+                
+                const action = await vscode.window.showErrorMessage(
+                    `Sort Anything: ${(err as Error).message}`,
+                    'Open Settings'
+                );
+                if (action === 'Open Settings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+                }
+                return;
             }
-            return;
+
+            const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                title: 'Sort Anything — Select Ollama Model',
+                placeHolder: 'Select an available local model',
+                matchOnDescription: true,
+            });
+
+            if (!pickedModel) { return; } // Model selection cancelled
+
+            targetModel = pickedModel.label;
+            sessionOllamaModel = targetModel;
+            // Save last used model in globalState and update provider in settings
+            await context.globalState.update('lastOllamaModel', targetModel);
         }
 
-        const pickedModel = await vscode.window.showQuickPick(modelItems, {
-            title: 'Sort Anything — Select Ollama Model',
-            placeHolder: 'Select an available local model',
-            matchOnDescription: true,
-        });
-
-        if (!pickedModel) { return; } // Model selection cancelled
-
-        // Save last used model in globalState and update provider in settings
-        await context.globalState.update('lastOllamaModel', pickedModel.label);
         await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
-        
-        await runGeneration('ollama', pickedModel.label);
+        await runGeneration('ollama', targetModel);
     }
 }
