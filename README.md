@@ -60,7 +60,7 @@
 ### Generate AI Commit Message
 1. Stage your changes with `git add`.
 2. Open the **Source Control** panel (`Ctrl+Shift+G`).
-3. Click the **✨ sparkle icon** next to the commit message input box.
+3. Click the **✨ sparkle icon** on the Source Control title bar (top right).
 4. Select a provider from the dropdown:
    - **Gemini** — requires an API key (see configuration below).
    - **Ollama** — requires Ollama running locally (`ollama serve`).

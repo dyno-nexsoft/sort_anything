@@ -79,7 +79,7 @@
           "group": "2_workspace@1"
         }
       ],
-      "scm/inputBox": [
+      "scm/title": [
         {
           "command": "sortAnything.generateCommitMessage",
           "group": "navigation"
