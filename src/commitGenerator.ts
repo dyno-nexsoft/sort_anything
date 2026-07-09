@@ -193,11 +193,55 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
 // Main export — hiện QuickPick với 3 option
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Ollama model helper
+// ---------------------------------------------------------------------------
+
+interface OllamaModelItem {
+    name: string;
+    details?: {
+        parameter_size?: string;
+        quantization_level?: string;
+    };
+}
+
+async function getOllamaModels(endpoint: string): Promise<vscode.QuickPickItem[]> {
+    const url = `${endpoint}/api/tags`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Ollama API trả về lỗi: ${response.status}`);
+        }
+        const data = (await response.json()) as { models?: OllamaModelItem[] };
+        if (!data.models || data.models.length === 0) {
+            throw new Error('Không tìm thấy model nào trong Ollama. Hãy chạy "ollama pull <model>" trước.');
+        }
+
+        return data.models.map(m => ({
+            label: m.name,
+            description: m.details
+                ? `Size: ${m.details.parameter_size || 'N/A'} | Quant: ${m.details.quantization_level || 'N/A'}`
+                : '',
+        }));
+    } catch (err) {
+        throw new Error(
+            `Không thể kết nối Ollama tại ${endpoint}.\n` +
+            `Chi tiết: ${(err as Error).message}\n` +
+            'Đảm bảo Ollama đang chạy (ollama serve) và CORS/Endpoint đúng.'
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main export — hiện QuickPick với 3 option
+// ---------------------------------------------------------------------------
+
 export async function generateCommitMessage(): Promise<void> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const currentProvider = config.get<string>('aiProvider', 'gemini');
     const geminiModel = config.get<string>('geminiModel', 'gemini-1.5-flash');
     const ollamaModel = config.get<string>('ollamaModel', 'llama3');
+    const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
 
     type ActionItem = vscode.QuickPickItem & { action: 'gemini' | 'ollama' | 'settings' };
 
@@ -232,8 +276,38 @@ export async function generateCommitMessage(): Promise<void> {
         return;
     }
 
-    // Lưu provider vừa chọn làm default
-    await config.update('aiProvider', picked.action, vscode.ConfigurationTarget.Global);
+    if (picked.action === 'ollama') {
+        // Bước chọn model từ API tags của Ollama
+        let modelItems: vscode.QuickPickItem[];
+        try {
+            modelItems = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'Sort Anything: Đang lấy danh sách model từ Ollama...',
+                    cancellable: false,
+                },
+                () => getOllamaModels(ollamaEndpoint)
+            );
+        } catch (err) {
+            vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+            return;
+        }
+
+        const pickedModel = await vscode.window.showQuickPick(modelItems, {
+            title: 'Sort Anything — Chọn Model Ollama',
+            placeHolder: 'Chọn model có sẵn trong máy của bạn',
+            matchOnDescription: true,
+        });
+
+        if (!pickedModel) { return; } // Hủy chọn model
+
+        // Lưu model đã chọn và cập nhật provider
+        await config.update('ollamaModel', pickedModel.label, vscode.ConfigurationTarget.Global);
+        await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
+    } else {
+        // Lưu default provider là Gemini
+        await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
+    }
 
     await runGeneration(picked.action);
 }
