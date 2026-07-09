@@ -56,7 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
     const generateCommitDisposable = vscode.commands.registerCommand(
         'sortAnything.generateCommitMessage',
         async () => {
-            await generateCommitMessage();
+            await generateCommitMessage(context);
         }
     );
 

@@ -109,11 +109,6 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Endpoint của Ollama server."
-        },
-        "sortAnything.ollamaModel": {
-          "type": "string",
-          "default": "llama3",
-          "description": "Model Ollama (e.g. llama3, mistral, codellama)."
         }
       }
     }
