@@ -49,10 +49,47 @@ ${diff}
 // Gemini provider
 // ---------------------------------------------------------------------------
 
-async function callGemini(prompt: string): Promise<string> {
+interface GeminiModelItem {
+    name: string;
+    displayName: string;
+    description: string;
+    supportedGenerationMethods: string[];
+}
+
+async function getGeminiModels(apiKey: string): Promise<vscode.QuickPickItem[]> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Gemini API error: ${response.status}`);
+        }
+        const data = (await response.json()) as { models?: GeminiModelItem[] };
+        if (!data.models || data.models.length === 0) {
+            throw new Error('No models returned from Gemini API.');
+        }
+
+        return data.models
+            .filter(m => m.supportedGenerationMethods.includes('generateContent'))
+            .map(m => {
+                const cleanName = m.name.replace(/^models\//, '');
+                return {
+                    label: cleanName,
+                    description: m.displayName,
+                    detail: m.description,
+                };
+            });
+    } catch (err) {
+        throw new Error(
+            `Failed to fetch models from Gemini API.\n` +
+            `Details: ${(err as Error).message}`
+        );
+    }
+}
+
+async function callGemini(prompt: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const apiKey = config.get<string>('geminiApiKey', '').trim();
-    const model = config.get<string>('geminiModel', 'gemini-3.5-flash').trim();
+    const model = (overrideModel || 'gemini-3.5-flash').trim();
 
     if (!apiKey) {
         const action = await vscode.window.showErrorMessage(
@@ -133,7 +170,10 @@ async function callOllama(prompt: string, overrideModel?: string): Promise<strin
 // Core: generate with a specific provider
 // ---------------------------------------------------------------------------
 
-async function runGeneration(provider: 'gemini' | 'ollama', selectedOllamaModel?: string): Promise<void> {
+async function runGeneration(
+    provider: 'gemini' | 'ollama',
+    selectedModel?: string
+): Promise<void> {
     // 1. Get git diff
     let diff: string;
     try {
@@ -187,8 +227,8 @@ async function runGeneration(provider: 'gemini' | 'ollama', selectedOllamaModel?
             },
             async () => {
                 return provider === 'ollama'
-                    ? await callOllama(prompt, selectedOllamaModel)
-                    : await callGemini(prompt);
+                    ? await callOllama(prompt, selectedModel)
+                    : await callGemini(prompt, selectedModel);
             }
         );
 
@@ -257,8 +297,12 @@ async function getOllamaModels(endpoint: string): Promise<vscode.QuickPickItem[]
 export async function generateCommitMessage(context: vscode.ExtensionContext): Promise<void> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const currentProvider = config.get<string>('aiProvider', 'gemini');
-    const geminiModel = config.get<string>('geminiModel', 'gemini-3.5-flash');
+    
+    // Read last used models from globalState
+    const geminiModel = context.globalState.get<string>('lastGeminiModel', 'gemini-3.5-flash');
     const ollamaModel = context.globalState.get<string>('lastOllamaModel', 'llama3');
+    
+    const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
     const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
 
     type ActionItem = vscode.QuickPickItem & { action: 'gemini' | 'ollama' | 'settings' };
@@ -294,7 +338,56 @@ export async function generateCommitMessage(context: vscode.ExtensionContext): P
         return;
     }
 
-    if (picked.action === 'ollama') {
+    if (picked.action === 'gemini') {
+        if (!geminiApiKey) {
+            const action = await vscode.window.showErrorMessage(
+                'Sort Anything: Gemini API Key is missing.',
+                'Open Settings'
+            );
+            if (action === 'Open Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+            }
+            return;
+        }
+
+        // Fetch Gemini models
+        let modelItems: vscode.QuickPickItem[];
+        try {
+            modelItems = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'Sort Anything: Fetching model list from Gemini...',
+                    cancellable: false,
+                },
+                () => getGeminiModels(geminiApiKey)
+            );
+        } catch (err) {
+            logError(err, 'Failed to fetch models from Gemini');
+            const action = await vscode.window.showErrorMessage(
+                `Sort Anything: ${(err as Error).message}`,
+                'Open Settings'
+            );
+            if (action === 'Open Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+            }
+            return;
+        }
+
+        const pickedModel = await vscode.window.showQuickPick(modelItems, {
+            title: 'Sort Anything — Select Gemini Model',
+            placeHolder: 'Select a Gemini model',
+            matchOnDescription: true,
+        });
+
+        if (!pickedModel) { return; } // Cancelled
+
+        // Save last used model in globalState and update provider in settings
+        await context.globalState.update('lastGeminiModel', pickedModel.label);
+        await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
+        
+        await runGeneration('gemini', pickedModel.label);
+
+    } else if (picked.action === 'ollama') {
         // Step to choose installed model from local Ollama
         let modelItems: vscode.QuickPickItem[];
         try {
@@ -332,10 +425,5 @@ export async function generateCommitMessage(context: vscode.ExtensionContext): P
         await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
         
         await runGeneration('ollama', pickedModel.label);
-    } else {
-        // Set default provider to Gemini
-        await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
-        
-        await runGeneration('gemini');
     }
 }

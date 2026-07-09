@@ -100,11 +100,6 @@
           "default": "",
           "markdownDescription": "Gemini API Key. Lấy tại [Google AI Studio](https://aistudio.google.com/apikey)."
         },
-        "sortAnything.geminiModel": {
-          "type": "string",
-          "default": "gemini-3.5-flash",
-          "description": "Model Gemini (e.g. gemini-3.5-flash, gemini-3.1-flash-lite)."
-        },
         "sortAnything.ollamaEndpoint": {
           "type": "string",
           "default": "http://localhost:11434",
