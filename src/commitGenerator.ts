@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { execSync } from 'child_process';
+import { logError, logInfo } from './utils';
 
 // ---------------------------------------------------------------------------
 // Git diff helper
@@ -197,6 +198,8 @@ async function runGeneration(provider: 'gemini' | 'ollama', selectedOllamaModel?
         // Restore user's previous input on error
         inputBox.value = originalValue;
         
+        logError(err, `Failed to generate commit message with ${label}`);
+        
         const action = await vscode.window.showErrorMessage(
             `Sort Anything: ${(err as Error).message}`,
             'Open Settings'
@@ -303,6 +306,8 @@ export async function generateCommitMessage(): Promise<void> {
                 () => getOllamaModels(ollamaEndpoint)
             );
         } catch (err) {
+            logError(err, 'Failed to fetch models from Ollama');
+            
             const action = await vscode.window.showErrorMessage(
                 `Sort Anything: ${(err as Error).message}`,
                 'Open Settings'

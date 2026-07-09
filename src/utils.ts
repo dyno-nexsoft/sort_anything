@@ -1,5 +1,37 @@
 import * as vscode from 'vscode';
 
+let outputChannel: vscode.OutputChannel | undefined;
+
+function getOutputChannel(): vscode.OutputChannel {
+    if (!outputChannel) {
+        outputChannel = vscode.window.createOutputChannel('Sort Anything');
+    }
+    return outputChannel;
+}
+
+export function logError(error: unknown, contextMessage?: string): void {
+    const channel = getOutputChannel();
+    const now = new Date().toISOString();
+    channel.appendLine(`[${now}] ERROR: ${contextMessage || ''}`);
+    if (error instanceof Error) {
+        channel.appendLine(`Message: ${error.message}`);
+        if (error.stack) {
+            channel.appendLine(`Stack: ${error.stack}`);
+        }
+    } else {
+        channel.appendLine(`Details: ${JSON.stringify(error)}`);
+    }
+    channel.appendLine('----------------------------------------------------');
+    // Bật panel output lên để user thấy ngay
+    channel.show(true);
+}
+
+export function logInfo(message: string): void {
+    const channel = getOutputChannel();
+    const now = new Date().toISOString();
+    channel.appendLine(`[${now}] INFO: ${message}`);
+}
+
 /// Gets the indentation string (spaces or tab) for the given document,
 /// based on the active editor options or by analyzing the document text.
 export function getIndent(document: vscode.TextDocument): string {
