@@ -50,7 +50,7 @@ ${diff}
 async function callGemini(prompt: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const apiKey = config.get<string>('geminiApiKey', '').trim();
-    const model = config.get<string>('geminiModel', 'gemini-2.0-flash').trim();
+    const model = config.get<string>('geminiModel', 'gemini-1.5-flash').trim();
 
     if (!apiKey) {
         const action = await vscode.window.showErrorMessage(
@@ -196,7 +196,7 @@ async function runGeneration(provider: 'gemini' | 'ollama'): Promise<void> {
 export async function generateCommitMessage(): Promise<void> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const currentProvider = config.get<string>('aiProvider', 'gemini');
-    const geminiModel = config.get<string>('geminiModel', 'gemini-2.0-flash');
+    const geminiModel = config.get<string>('geminiModel', 'gemini-1.5-flash');
     const ollamaModel = config.get<string>('ollamaModel', 'llama3');
 
     type ActionItem = vscode.QuickPickItem & { action: 'gemini' | 'ollama' | 'settings' };
