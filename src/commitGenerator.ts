@@ -19,8 +19,7 @@ function getGitDiff(cwd: string): string {
 // Prompt Builder
 // ---------------------------------------------------------------------------
 
-function buildPrompt(diff: string): string {
-    return `You are a senior software engineer. Based on the following git diff, write a concise and professional commit message following Conventional Commits format (e.g., feat:, fix:, refactor:, chore:, docs:, style:, test:, build:, ci:, perf:).
+const SYSTEM_INSTRUCTION = `You are a senior software engineer. Based on the following git diff, write a concise and professional commit message following Conventional Commits format (e.g., feat:, fix:, refactor:, chore:, docs:, style:, test:, build:, ci:, perf:).
 
 Rules:
 - Output ONLY the raw commit message text, nothing else. Do not wrap in quotes, backticks, or code blocks.
@@ -28,9 +27,10 @@ Rules:
 - Keep the subject line (first line) under 72 characters.
 - Write a SINGLE-LINE message for simple, small, or single-topic changes (e.g., "docs: update README").
 - Use a MULTI-LINE message (short subject line + blank line + bulleted body) ONLY for large, complex changes with multiple distinct tasks.
-- Keep it natural, clean, and developer-friendly. Avoid repeating obvious file names in bullet points if it's already clear.
+- Keep it natural, clean, and developer-friendly. Avoid repeating obvious file names in bullet points if it's already clear.`;
 
-Git diff:
+function buildPrompt(diff: string): string {
+    return `Git diff:
 \`\`\`
 ${diff}
 \`\`\``;
@@ -77,7 +77,7 @@ async function getGeminiModels(apiKey: string): Promise<vscode.QuickPickItem[]> 
     }
 }
 
-async function callGemini(prompt: string, overrideModel?: string): Promise<string> {
+async function callGemini(prompt: string, systemInstruction: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const apiKey = config.get<string>('geminiApiKey', '').trim();
     const model = (overrideModel || 'gemini-3.5-flash').trim();
@@ -97,6 +97,9 @@ async function callGemini(prompt: string, overrideModel?: string): Promise<strin
 
     const body = {
         contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: {
+            parts: [{ text: systemInstruction }]
+        },
         generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
     };
 
@@ -124,13 +127,13 @@ async function callGemini(prompt: string, overrideModel?: string): Promise<strin
 // Ollama provider
 // ---------------------------------------------------------------------------
 
-async function callOllama(prompt: string, overrideModel?: string): Promise<string> {
+async function callOllama(prompt: string, systemPrompt: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const endpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
     const model = (overrideModel || config.get<string>('ollamaModel', 'llama3')).trim();
 
     const url = `${endpoint}/api/generate`;
-    const body = { model, prompt, stream: false, options: { temperature: 0.3 } };
+    const body = { model, prompt, system: systemPrompt, stream: false, options: { temperature: 0.3 } };
 
     let response: Response;
     try {
@@ -157,13 +160,38 @@ async function callOllama(prompt: string, overrideModel?: string): Promise<strin
     return text;
 }
 
+function cleanCommitMessage(msg: string): string {
+    let cleaned = msg.trim();
+    
+    // Extract content from a code block if present
+    const codeBlockRegex = /```[a-zA-Z]*\r?\n([\s\S]*?)\r?\n```/;
+    const match = cleaned.match(codeBlockRegex);
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    // Fallback: inline code block
+    const inlineCodeBlockRegex = /```([\s\S]*?)```/;
+    const inlineMatch = cleaned.match(inlineCodeBlockRegex);
+    if (inlineMatch && inlineMatch[1]) {
+        return inlineMatch[1].trim();
+    }
+
+    // Strip leading/trailing backticks just in case
+    cleaned = cleaned.replace(/^```[a-zA-Z]*\s+/, '');
+    cleaned = cleaned.replace(/\s+```$/, '');
+    
+    return cleaned.trim();
+}
+
 // ---------------------------------------------------------------------------
 // Core: generate with a specific provider
 // ---------------------------------------------------------------------------
 
 async function runGeneration(
     provider: 'gemini' | 'ollama',
-    selectedModel?: string
+    selectedModel?: string,
+    scm?: any
 ): Promise<void> {
     // 1. Access Git extension API
     const gitExtension = vscode.extensions.getExtension<{
@@ -187,9 +215,22 @@ async function runGeneration(
     }
 
     let selectedRepo = git.repositories[0];
+    let matchedRepo = false;
 
-    // 2. If multiple repos, prompt user to select one
-    if (git.repositories.length > 1) {
+    // Check if we can determine the repository from the scm context (e.g. when button clicked in SCM view)
+    if (scm && scm.rootUri) {
+        const scmPath = scm.rootUri.fsPath.toLowerCase();
+        const found = git.repositories.find(
+            repo => repo.rootUri.fsPath.toLowerCase() === scmPath
+        );
+        if (found) {
+            selectedRepo = found;
+            matchedRepo = true;
+        }
+    }
+
+    // 2. If multiple repos and we couldn't match from context, prompt user to select one
+    if (!matchedRepo && git.repositories.length > 1) {
         const repoItems = git.repositories.map(repo => {
             const folderName = repo.rootUri.fsPath.split(/[\\/]/).pop() || repo.rootUri.fsPath;
             return {
@@ -241,9 +282,10 @@ async function runGeneration(
                 cancellable: false,
             },
             async () => {
-                return provider === 'ollama'
-                    ? await callOllama(prompt, selectedModel)
-                    : await callGemini(prompt, selectedModel);
+                const raw = provider === 'ollama'
+                    ? await callOllama(prompt, SYSTEM_INSTRUCTION, selectedModel)
+                    : await callGemini(prompt, SYSTEM_INSTRUCTION, selectedModel);
+                return cleanCommitMessage(raw);
             }
         );
 
@@ -309,7 +351,7 @@ async function getOllamaModels(endpoint: string): Promise<vscode.QuickPickItem[]
 let sessionGeminiModel: string | undefined;
 let sessionOllamaModel: string | undefined;
 
-export async function generateCommitMessage(context: vscode.ExtensionContext): Promise<void> {
+export async function generateCommitMessage(context: vscode.ExtensionContext, scm?: any): Promise<void> {
     const config = vscode.workspace.getConfiguration('sortAnything');
     const currentProvider = config.get<string>('aiProvider', 'gemini');
     
@@ -406,7 +448,7 @@ export async function generateCommitMessage(context: vscode.ExtensionContext): P
         }
 
         await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
-        await runGeneration('gemini', targetModel);
+        await runGeneration('gemini', targetModel, scm);
 
     } else if (picked.action === 'ollama') {
         let targetModel = sessionOllamaModel;
@@ -451,6 +493,6 @@ export async function generateCommitMessage(context: vscode.ExtensionContext): P
         }
 
         await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
-        await runGeneration('ollama', targetModel);
+        await runGeneration('ollama', targetModel, scm);
     }
 }
