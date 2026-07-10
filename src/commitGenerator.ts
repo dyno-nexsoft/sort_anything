@@ -78,17 +78,17 @@ async function getGeminiModels(apiKey: string): Promise<vscode.QuickPickItem[]> 
 }
 
 async function callGemini(prompt: string, systemInstruction: string, overrideModel?: string): Promise<string> {
-    const config = vscode.workspace.getConfiguration('sortAnything');
+    const config = vscode.workspace.getConfiguration('dynoExtension');
     const apiKey = config.get<string>('geminiApiKey', '').trim();
     const model = (overrideModel || 'gemini-3.5-flash').trim();
 
     if (!apiKey) {
         const action = await vscode.window.showErrorMessage(
-            'Sort Anything: Gemini API Key is missing.',
+            'Dyno Extension: Gemini API Key is missing.',
             'Open Settings'
         );
         if (action === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
         }
         throw new Error('Gemini API Key missing — operation cancelled.');
     }
@@ -128,7 +128,7 @@ async function callGemini(prompt: string, systemInstruction: string, overrideMod
 // ---------------------------------------------------------------------------
 
 async function callOllama(prompt: string, systemPrompt: string, overrideModel?: string): Promise<string> {
-    const config = vscode.workspace.getConfiguration('sortAnything');
+    const config = vscode.workspace.getConfiguration('dynoExtension');
     const endpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
     const model = (overrideModel || config.get<string>('ollamaModel', 'llama3')).trim();
 
@@ -204,13 +204,13 @@ async function runGeneration(
     }>('vscode.git');
 
     if (!gitExtension) {
-        vscode.window.showErrorMessage('Sort Anything: VS Code Git extension not found.');
+        vscode.window.showErrorMessage('Dyno Extension: VS Code Git extension not found.');
         return;
     }
 
     const git = gitExtension.exports.getAPI(1);
     if (git.repositories.length === 0) {
-        vscode.window.showErrorMessage('Sort Anything: No active Git repository found.');
+        vscode.window.showErrorMessage('Dyno Extension: No active Git repository found.');
         return;
     }
 
@@ -241,7 +241,7 @@ async function runGeneration(
         });
 
         const pickedRepo = await vscode.window.showQuickPick(repoItems, {
-            title: 'Sort Anything — Select Git Repository',
+            title: 'Dyno Extension — Select Git Repository',
             placeHolder: 'Select the repository to generate a commit message for',
             matchOnDescription: true,
         });
@@ -257,13 +257,13 @@ async function runGeneration(
     try {
         diff = getGitDiff(selectedRepo.rootUri.fsPath);
     } catch (err) {
-        vscode.window.showErrorMessage(`Sort Anything: ${(err as Error).message}`);
+        vscode.window.showErrorMessage(`Dyno Extension: ${(err as Error).message}`);
         return;
     }
 
     if (!diff) {
         vscode.window.showWarningMessage(
-            'Sort Anything: No staged changes found. Please run "git add" first.'
+            'Dyno Extension: No staged changes found. Please run "git add" first.'
         );
         return;
     }
@@ -278,7 +278,7 @@ async function runGeneration(
         const message = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Sort Anything: Generating commit message with ${label}...`,
+                title: `Dyno Extension: Generating commit message with ${label}...`,
                 cancellable: false,
             },
             async () => {
@@ -291,16 +291,16 @@ async function runGeneration(
 
         // Insert final message
         inputBox.value = message;
-        vscode.window.setStatusBarMessage(`$(check) Sort Anything: Commit message populated from ${label}!`, 4000);
+        vscode.window.setStatusBarMessage(`$(check) Dyno Extension: Commit message populated from ${label}!`, 4000);
     } catch (err) {
         logError(err, `Failed to generate commit message with ${label}`);
         
         const action = await vscode.window.showErrorMessage(
-            `Sort Anything: ${(err as Error).message}`,
+            `Dyno Extension: ${(err as Error).message}`,
             'Open Settings'
         );
         if (action === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
         }
     }
 }
@@ -352,8 +352,8 @@ let sessionGeminiModel: string | undefined;
 let sessionOllamaModel: string | undefined;
 
 export async function generateCommitMessage(context: vscode.ExtensionContext, scm?: any): Promise<void> {
-    const config = vscode.workspace.getConfiguration('sortAnything');
-    const currentProvider = config.get<string>('aiProvider', 'gemini');
+    const config = vscode.workspace.getConfiguration('dynoExtension');
+    const currentProvider = context.globalState.get<string>('lastAiProvider', 'gemini');
     
     // Read last used models from globalState
     const geminiModel = context.globalState.get<string>('lastGeminiModel', 'gemini-3.5-flash');
@@ -376,14 +376,14 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
             action: 'ollama',
         },
         {
-            label: '$(settings-gear) Switch AI Provider / Configure...',
-            description: 'Open Settings to change provider, model, or API keys',
+            label: '$(settings-gear) Configure API Keys & Endpoints...',
+            description: 'Open Settings to configure Gemini API Key or Ollama Endpoint',
             action: 'settings',
         },
     ];
 
     const picked = await vscode.window.showQuickPick(items, {
-        title: 'Sort Anything — Generate Commit Message',
+        title: 'Dyno Extension — Generate Commit Message',
         placeHolder: 'Select AI provider to generate commit message',
         matchOnDescription: true,
     });
@@ -391,18 +391,18 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
     if (!picked) { return; }
 
     if (picked.action === 'settings') {
-        vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+        vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
         return;
     }
 
     if (picked.action === 'gemini') {
         if (!geminiApiKey) {
             const action = await vscode.window.showErrorMessage(
-                'Sort Anything: Gemini API Key is missing.',
+                'Dyno Extension: Gemini API Key is missing.',
                 'Open Settings'
             );
             if (action === 'Open Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+                vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
             }
             return;
         }
@@ -416,7 +416,7 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
                 modelItems = await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
-                        title: 'Sort Anything: Fetching model list from Gemini...',
+                        title: 'Dyno Extension: Fetching model list from Gemini...',
                         cancellable: false,
                     },
                     () => getGeminiModels(geminiApiKey)
@@ -424,17 +424,17 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
             } catch (err) {
                 logError(err, 'Failed to fetch models from Gemini');
                 const action = await vscode.window.showErrorMessage(
-                    `Sort Anything: ${(err as Error).message}`,
+                    `Dyno Extension: ${(err as Error).message}`,
                     'Open Settings'
                 );
                 if (action === 'Open Settings') {
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
                 }
                 return;
             }
 
             const pickedModel = await vscode.window.showQuickPick(modelItems, {
-                title: 'Sort Anything — Select Gemini Model',
+                title: 'Dyno Extension — Select Gemini Model',
                 placeHolder: 'Select a Gemini model',
                 matchOnDescription: true,
             });
@@ -447,7 +447,7 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
             await context.globalState.update('lastGeminiModel', targetModel);
         }
 
-        await config.update('aiProvider', 'gemini', vscode.ConfigurationTarget.Global);
+        await context.globalState.update('lastAiProvider', 'gemini');
         await runGeneration('gemini', targetModel, scm);
 
     } else if (picked.action === 'ollama') {
@@ -460,7 +460,7 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
                 modelItems = await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
-                        title: 'Sort Anything: Fetching model list from Ollama...',
+                        title: 'Dyno Extension: Fetching model list from Ollama...',
                         cancellable: false,
                     },
                     () => getOllamaModels(ollamaEndpoint)
@@ -469,17 +469,17 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
                 logError(err, 'Failed to fetch models from Ollama');
                 
                 const action = await vscode.window.showErrorMessage(
-                    `Sort Anything: ${(err as Error).message}`,
+                    `Dyno Extension: ${(err as Error).message}`,
                     'Open Settings'
                 );
                 if (action === 'Open Settings') {
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'sortAnything');
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
                 }
                 return;
             }
 
             const pickedModel = await vscode.window.showQuickPick(modelItems, {
-                title: 'Sort Anything — Select Ollama Model',
+                title: 'Dyno Extension — Select Ollama Model',
                 placeHolder: 'Select an available local model',
                 matchOnDescription: true,
             });
@@ -492,7 +492,7 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
             await context.globalState.update('lastOllamaModel', targetModel);
         }
 
-        await config.update('aiProvider', 'ollama', vscode.ConfigurationTarget.Global);
+        await context.globalState.update('lastAiProvider', 'ollama');
         await runGeneration('ollama', targetModel, scm);
     }
 }

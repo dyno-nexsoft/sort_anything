@@ -1,8 +1,8 @@
 {
-  "name": "sort-anything",
-  "displayName": "Sort Anything",
+  "name": "dyno-extension",
+  "displayName": "Dyno Extension",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -34,27 +34,27 @@
     "onLanguage:dotenv",
     "onLanguage:ignore",
     "onLanguage:plaintext",
-    "onCommand:sortAnything.generateDartBarrel",
-    "onCommand:sortAnything.generateCommitMessage"
+    "onCommand:dynoExtension.generateDartBarrel",
+    "onCommand:dynoExtension.generateCommitMessage"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "sortAnything.sortDocument",
-        "title": "Sort Anything: Sort Document"
+        "command": "dynoExtension.sortDocument",
+        "title": "Dyno Extension: Sort Document"
       },
       {
-        "command": "sortAnything.sortSelection",
-        "title": "Sort Anything: Sort Selection"
+        "command": "dynoExtension.sortSelection",
+        "title": "Dyno Extension: Sort Selection"
       },
       {
-        "command": "sortAnything.generateDartBarrel",
+        "command": "dynoExtension.generateDartBarrel",
         "title": "Generate Dart Barrel File",
         "icon": "$(file-code)"
       },
       {
-        "command": "sortAnything.generateCommitMessage",
+        "command": "dynoExtension.generateCommitMessage",
         "title": "Generate Commit Message with AI",
         "icon": "$(sparkle)"
       }
@@ -63,47 +63,39 @@
       "editor/context": [
         {
           "when": "resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml || resourceLangId == properties || resourceLangId == env || resourceLangId == dotenv || resourceLangId == ignore || resourceLangId == plaintext",
-          "command": "sortAnything.sortDocument",
+          "command": "dynoExtension.sortDocument",
           "group": "1_modification"
         },
         {
           "when": "editorHasSelection && (resourceLangId == json || resourceLangId == jsonc || resourceLangId == yaml || resourceLangId == properties || resourceLangId == env || resourceLangId == dotenv || resourceLangId == ignore || resourceLangId == plaintext)",
-          "command": "sortAnything.sortSelection",
+          "command": "dynoExtension.sortSelection",
           "group": "1_modification"
         }
       ],
       "explorer/context": [
         {
           "when": "explorerResourceIsFolder",
-          "command": "sortAnything.generateDartBarrel",
+          "command": "dynoExtension.generateDartBarrel",
           "group": "2_workspace@1"
         }
       ],
       "scm/title": [
         {
-          "command": "sortAnything.generateCommitMessage",
+          "command": "dynoExtension.generateCommitMessage",
           "group": "navigation"
         }
       ]
     },
     "configuration": {
-      "title": "Sort Anything",
+      "title": "Dyno Extension",
       "properties": {
-        "sortAnything.aiProvider": {
-          "type": "string",
-          "enum": [
-            "gemini",
-            "ollama"
-          ],
-          "default": "gemini",
-          "description": "AI provider để gen commit message."
-        },
-        "sortAnything.geminiApiKey": {
+
+        "dynoExtension.geminiApiKey": {
           "type": "string",
           "default": "",
           "markdownDescription": "Gemini API Key. Lấy tại [Google AI Studio](https://aistudio.google.com/apikey)."
         },
-        "sortAnything.ollamaEndpoint": {
+        "dynoExtension.ollamaEndpoint": {
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Endpoint của Ollama server."
@@ -116,7 +108,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "package-to-desktop": "vsce package -o \"%USERPROFILE%\\Desktop\\sort-anything.vsix\""
+    "package-to-desktop": "vsce package -o \"%USERPROFILE%\\Desktop\\dyno-extension.vsix\""
   },
   "dependencies": {
     "comment-json": "^4.2.3",

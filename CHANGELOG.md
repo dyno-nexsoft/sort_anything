@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "Sort Anything" extension will be documented in this file.
+All notable changes to the "Dyno Extension" extension will be documented in this file.
 
 ## [0.1.0] - 2026-07-09
 - Added **AI Commit Message Generator** featuring:

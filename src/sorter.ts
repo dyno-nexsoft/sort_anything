@@ -76,7 +76,7 @@ function sortText(text: string, languageId: string, indent: string): string | nu
             return sortLines(text);
         }
     } catch (e) {
-        vscode.window.showErrorMessage(`Sort Anything: Failed to sort — ${(e as Error).message}`);
+        vscode.window.showErrorMessage(`Dyno Extension: Failed to sort — ${(e as Error).message}`);
         console.error('Error sorting text:', e);
     }
     return null;

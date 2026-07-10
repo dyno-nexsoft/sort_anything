@@ -25,13 +25,13 @@ jobs:
         run: npm install
 
       - name: Package extension (.vsix)
-        run: npx vsce package -o sort-anything.vsix
+        run: npx vsce package -o dyno-extension.vsix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: sort-anything.vsix
+          files: dyno-extension.vsix
           generate_release_notes: true
 
       # If triggered manually (not a tag), just upload the vsix as a build artifact
@@ -39,5 +39,5 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: sort-anything-extension
-          path: sort-anything.vsix
+          name: dyno-extension
+          path: dyno-extension.vsix

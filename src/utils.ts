@@ -4,7 +4,7 @@ let outputChannel: vscode.OutputChannel | undefined;
 
 function getOutputChannel(): vscode.OutputChannel {
     if (!outputChannel) {
-        outputChannel = vscode.window.createOutputChannel('Sort Anything');
+        outputChannel = vscode.window.createOutputChannel('Dyno Extension');
     }
     return outputChannel;
 }

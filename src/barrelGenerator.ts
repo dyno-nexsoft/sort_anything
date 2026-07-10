@@ -70,7 +70,7 @@ export async function generateBarrelFile(folderUri: vscode.Uri): Promise<void> {
 
     if (exportablePaths.length === 0) {
         vscode.window.showWarningMessage(
-            `Sort Anything: No exportable Dart files found in "${folderName}".`
+            `Dyno Extension: No exportable Dart files found in "${folderName}".`
         );
         return;
     }
@@ -92,7 +92,7 @@ export async function generateBarrelFile(folderUri: vscode.Uri): Promise<void> {
     await vscode.window.showTextDocument(doc);
 
     vscode.window.setStatusBarMessage(
-        `$(check) Sort Anything: Barrel file "${barrelFileName}" generated with ${exportLines.length} export(s).`,
+        `$(check) Dyno Extension: Barrel file "${barrelFileName}" generated with ${exportLines.length} export(s).`,
         4000
     );
 }

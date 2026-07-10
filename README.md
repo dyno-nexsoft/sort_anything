@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="icon.png" width="128" height="128" alt="Sort Anything Icon" />
-  <h1>Sort Anything</h1>
+  <img src="icon.png" width="128" height="128" alt="Dyno Extension Icon" />
+  <h1>Dyno Extension</h1>
   <p>A powerful VS Code extension to sort data files, generate Dart barrel files, and craft AI-powered commit messages.</p>
 </div>
 
@@ -57,8 +57,8 @@
 ### Sort a file
 
 1. Open a supported file (e.g., `data.json`, `config.yaml`, `.env`).
-2. **Right-Click** anywhere in the file → **"Sort Anything: Sort Document"**.
-3. To sort a specific section, highlight text → **Right-Click** → **"Sort Anything: Sort Selection"**.
+2. **Right-Click** anywhere in the file → **"Dyno Extension: Sort Document"**.
+3. To sort a specific section, highlight text → **Right-Click** → **"Dyno Extension: Sort Selection"**.
 4. _(Alternatively: Command Palette `Ctrl+Shift+P` / `Cmd+Shift+P`)_
 
 ### Generate AI Commit Message
@@ -90,12 +90,10 @@ export 'user.dart';
 
 ## Extension Settings
 
-| Setting                       | Default                    | Description                                                                                     |
-| ----------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------- |
-| `sortAnything.aiProvider`     | `"gemini"`                 | Default AI provider (`gemini` or `ollama`)                                                      |
-| `sortAnything.geminiApiKey`   | `""`                       | Your Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey) |
-| `sortAnything.geminiModel`    | `"gemini-3.5-flash"`       | Gemini model to use (e.g., `gemini-3.5-flash`, `gemini-3.1-flash-lite`)                         |
-| `sortAnything.ollamaEndpoint` | `"http://localhost:11434"` | Ollama server endpoint                                                                          |
+| Setting                         | Default                    | Description                                                                                     |
+| ------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `dynoExtension.geminiApiKey`    | `""`                       | Your Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `dynoExtension.ollamaEndpoint`  | `"http://localhost:11434"` | Ollama server endpoint                                                                          |
 
 > **Tip:** You can open settings directly from the **⚙️ Switch AI Provider / Configure...** option in the commit message dropdown.
 
