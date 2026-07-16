@@ -122,6 +122,7 @@ interface AgentRun {
     ts: number;
     durationMs: number;  // -1 = still running
     running: boolean;
+    failed: boolean;     // tool_result for this Task came back with is_error
     toolCount: number;   // tools the subagent ran (from Task result summary, if present)
     tokens: number;      // subagent tokens (from Task result summary, if present)
 }
@@ -306,7 +307,7 @@ class TranscriptAggregator {
                 for (const c of content) {
                     if (c.type === 'tool_result') {
                         isToolResult = true;
-                        this.onToolResult(c.tool_use_id, ts, o.toolUseResult);
+                        this.onToolResult(c.tool_use_id, ts, o.toolUseResult, !!c.is_error);
                     }
                 }
             }
@@ -344,7 +345,7 @@ class TranscriptAggregator {
             a.count++; a.lastDesc = desc; a.lastId = c.id || '';
             this.agents.set(agentType, a);
             if (!isSidechain && c.id) {   // a spoke off the main agent
-                this.agentRuns.set(c.id, { id: c.id, type: agentType, desc, ts, durationMs: -1, running: true, toolCount: 0, tokens: 0 });
+                this.agentRuns.set(c.id, { id: c.id, type: agentType, desc, ts, durationMs: -1, running: true, failed: false, toolCount: 0, tokens: 0 });
             }
             detail = `${agentType}: ${desc}`;
         } else if (input.file_path) {
@@ -364,7 +365,7 @@ class TranscriptAggregator {
         }
     }
 
-    private onToolResult(toolUseId: string, ts: number, toolUseResult: any) {
+    private onToolResult(toolUseId: string, ts: number, toolUseResult: any, isError: boolean) {
         if (toolUseId) { this.pendingIds.delete(toolUseId); }
         if (toolUseId && this.lastToolUsePending?.id === toolUseId) { this.lastToolUsePending = undefined; }
         const start = toolUseId ? this.toolStart.get(toolUseId) : undefined;
@@ -375,6 +376,7 @@ class TranscriptAggregator {
         const run = toolUseId ? this.agentRuns.get(toolUseId) : undefined;
         if (run) {
             run.running = false;
+            run.failed = isError;
             if (start && ts >= start.ts) { run.durationMs = ts - start.ts; }
             if (toolUseResult && typeof toolUseResult === 'object') {
                 run.toolCount = Number(toolUseResult.totalToolUseCount ?? toolUseResult.toolUseCount ?? run.toolCount) || 0;
@@ -707,7 +709,7 @@ function getHtml(): string {
 
   <div class="grid">
     <div class="card">
-      <h2>Agent orchestration <span class="help" data-tip="Sơ đồ hub-and-spoke: vòng tròn giữa là AGENT CHÍNH (orchestrator, chạy model chính). Mỗi nhánh toả ra = 1 lần agent chính gọi subagent qua tool Task. Node nhánh ghi loại subagent + trạng thái; nhánh/viền nhấp nháy = đang chạy; node càng to = subagent dùng càng nhiều tool. Hover node để xem mô tả, thời gian, số tool và token. Danh sách file gom vào mục 'Files touched' phía dưới.">?</span>
+      <h2>Agent orchestration <span class="help" data-tip="Sơ đồ hub-and-spoke: vòng tròn giữa là AGENT CHÍNH (orchestrator, chạy model chính). Mỗi nhánh toả ra = 1 lần agent chính gọi subagent qua tool Task. Vòng ngoài của node = màu theo loại subagent; màu bên trong = trạng thái (xanh dương nhấp nháy = đang chạy, xanh lá = xong, đỏ + dấu ! = lỗi). Node càng to = subagent dùng càng nhiều tool. Hover để xem mô tả, thời gian, số tool và token. Danh sách file gom vào mục 'Files touched' phía dưới.">?</span>
         <span class="sp" style="flex:1"></span>
         <span class="muted" id="ag-info"></span>
       </h2>
@@ -759,6 +761,9 @@ function gitColor(gs){ return gs==='M'?'#d29922':(gs==='A'||gs==='?')?'#3fb950':
 
 // ---- hub-and-spoke agent orchestration diagram -----------------------------
 function svgEl(ns,tag,attrs){ const e=document.createElementNS(ns,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+function runStatus(r){ return r.running ? 'running' : r.failed ? 'failed' : 'done'; }
+const STATUS_COLOR = { running:'#3794ff', failed:'#f85149', done:'#3fb950' };
+function statusLabel(r){ return r.running ? 'running…' : r.failed ? 'failed · '+dur(r.durationMs) : 'done · '+dur(r.durationMs); }
 
 function renderAgentGraph(st){
   const svg=document.getElementById('agraph'); svg.innerHTML='';
@@ -776,25 +781,28 @@ function renderAgentGraph(st){
   const n=runs.length;
   const ringR=Math.max(90, Math.min(W,H)/2 - 90);
   const positions=runs.map((r,i)=>{ const ang=-Math.PI/2 + (n? 2*Math.PI*i/n : 0); return {x:cx+ringR*Math.cos(ang), y:cy+ringR*Math.sin(ang)}; });
-  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i];
-    const line=svgEl(ns,'line',{x1:cx,y1:cy,x2:p.x,y2:p.y,stroke:colorForTool(r.type),'stroke-opacity':r.running?'0.9':'0.4','stroke-width':r.running?'2.5':'1.5'});
+  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i], sc=STATUS_COLOR[runStatus(r)];
+    const line=svgEl(ns,'line',{x1:cx,y1:cy,x2:p.x,y2:p.y,stroke:sc,'stroke-opacity':r.running?'0.9':r.failed?'0.7':'0.45','stroke-width':r.running?'2.5':'1.5'});
     if(r.running){ line.setAttribute('stroke-dasharray','5,4'); line.setAttribute('class','ag-flow'); }
     svg.appendChild(line);
   }
 
-  // spoke nodes
-  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i];
+  // spoke nodes: outer ring = subagent type color, fill/inner = run status (running/failed/done)
+  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i], sc=STATUS_COLOR[runStatus(r)];
     const rad=Math.max(16, Math.min(36, 16 + (r.toolCount||0)*1.4));
     const g=svgEl(ns,'g',{class:'ag-node'});
-    const circ=svgEl(ns,'circle',{cx:p.x,cy:p.y,r:rad,fill:colorForTool(r.type),'fill-opacity':r.running?'0.9':'0.35',stroke:colorForTool(r.type),'stroke-width':r.running?'3':'1.5'});
+    const ring=svgEl(ns,'circle',{cx:p.x,cy:p.y,r:rad+3,fill:'none',stroke:colorForTool(r.type),'stroke-width':'2','stroke-opacity':'0.6'});
+    g.appendChild(ring);
+    const circ=svgEl(ns,'circle',{cx:p.x,cy:p.y,r:rad,fill:sc,'fill-opacity':r.running?'0.85':r.failed?'0.55':'0.35',stroke:sc,'stroke-width':r.running||r.failed?'3':'1.5'});
     if(r.running){ circ.setAttribute('class','ag-pulse'); }
-    circ.innerHTML='<title>'+escapeHtml(r.type)+(r.running?' (running)':'')+'\\n'+escapeHtml(r.desc||'')+'\\n'+(r.durationMs>=0?('duration '+dur(r.durationMs)):'running')+(r.toolCount?(' · '+r.toolCount+' tools'):'')+(r.tokens?(' · '+fmt(r.tokens)+' tok'):'')+'</title>';
+    circ.innerHTML='<title>'+escapeHtml(r.type)+' · '+runStatus(r)+'\\n'+escapeHtml(r.desc||'')+'\\n'+statusLabel(r)+(r.toolCount?(' · '+r.toolCount+' tools'):'')+(r.tokens?(' · '+fmt(r.tokens)+' tok'):'')+'</title>';
     g.appendChild(circ);
+    if(r.failed){ const x=svgEl(ns,'text',{x:p.x,y:p.y+4,'text-anchor':'middle','font-size':Math.min(16,rad)+'','font-weight':'700',fill:'#fff'}); x.textContent='!'; g.appendChild(x); }
     // type label under node
-    const t=svgEl(ns,'text',{x:p.x,y:p.y+rad+13,'text-anchor':'middle','font-size':'11','font-weight':'600',fill:'var(--vscode-foreground)'});
+    const t=svgEl(ns,'text',{x:p.x,y:p.y+rad+16,'text-anchor':'middle','font-size':'11','font-weight':'600',fill:'var(--vscode-foreground)'});
     t.textContent=r.type.length>16?r.type.slice(0,15)+'…':r.type; g.appendChild(t);
-    const t2=svgEl(ns,'text',{x:p.x,y:p.y+rad+26,'text-anchor':'middle','font-size':'10',fill:'var(--vscode-descriptionForeground)'});
-    t2.textContent=r.running?'running…':dur(r.durationMs); g.appendChild(t2);
+    const t2=svgEl(ns,'text',{x:p.x,y:p.y+rad+29,'text-anchor':'middle','font-size':'10',fill:sc});
+    t2.textContent=statusLabel(r); g.appendChild(t2);
     svg.appendChild(g);
   }
 
@@ -813,11 +821,15 @@ function renderAgentGraph(st){
     t.textContent='Agent chính đang tự thực thi — chưa gọi subagent (Task) nào'; svg.appendChild(t);
   }
 
-  // legend: subagent types
+  // legend: run status + subagent types (ring color)
+  const byStatus={running:0,failed:0,done:0}; for(const r of runs) byStatus[runStatus(r)]++;
   const byType={}; for(const r of runs){ byType[r.type]=(byType[r.type]||0)+1; }
-  legend.innerHTML=Object.entries(byType).sort((a,b)=>b[1]-a[1])
-    .map(([t,c])=>'<span><i style="background:'+colorForTool(t)+'"></i>'+t+' ('+c+')</span>').join('')
-    + '<span>· node lớn = subagent dùng nhiều tool · hover xem chi tiết</span>';
+  legend.innerHTML =
+    '<span><i style="background:'+STATUS_COLOR.running+'"></i>running ('+byStatus.running+')</span>'+
+    '<span><i style="background:'+STATUS_COLOR.done+'"></i>done ('+byStatus.done+')</span>'+
+    '<span><i style="background:'+STATUS_COLOR.failed+'"></i>failed ('+byStatus.failed+')</span>'+
+    Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=>'<span><i style="background:'+colorForTool(t)+'"></i>'+t+' ('+c+')</span>').join('')
+    + '<span>· vòng ngoài = loại subagent · màu trong = trạng thái · node to = nhiều tool</span>';
 }
 
 function renderFilesList(st){
