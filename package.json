@@ -88,6 +88,9 @@
         {
           "command": "dynoExtension.generateCommitMessage",
           "group": "navigation"
+        },
+        {
+          "command": "dynoExtension.generateCommitMessage"
         }
       ]
     },

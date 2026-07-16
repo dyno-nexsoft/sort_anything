@@ -52,7 +52,18 @@ async function getGeminiModels(apiKey: string): Promise<vscode.QuickPickItem[]> 
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            throw new Error(`Gemini API error: ${response.status}`);
+            const errText = await response.text();
+            try {
+                const errJson = JSON.parse(errText);
+                if (errJson?.error?.message) {
+                    throw new Error(`Gemini API error (${response.status}): ${errJson.error.message}`);
+                }
+            } catch (e) {
+                if (e instanceof Error && e.message.startsWith('Gemini API error')) {
+                    throw e;
+                }
+            }
+            throw new Error(`Gemini API error: ${response.status} — ${errText}`);
         }
         const data = (await response.json()) as { models?: GeminiModelItem[] };
         if (!data.models || data.models.length === 0) {
@@ -111,6 +122,16 @@ async function callGemini(prompt: string, systemInstruction: string, overrideMod
 
     if (!response.ok) {
         const errText = await response.text();
+        try {
+            const errJson = JSON.parse(errText);
+            if (errJson?.error?.message) {
+                throw new Error(`Gemini API error (${response.status}): ${errJson.error.message}`);
+            }
+        } catch (e) {
+            if (e instanceof Error && e.message.startsWith('Gemini API error')) {
+                throw e;
+            }
+        }
         throw new Error(`Gemini API error (${response.status}): ${errText}`);
     }
 
