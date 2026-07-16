@@ -627,6 +627,7 @@ function getHtml(): string {
   @keyframes flow { to { stroke-dashoffset: -18; } }
   .grid { display: grid; grid-template-columns: 1fr 320px; gap: 14px; align-items: start; }
   @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  .top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; }
   .card { border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); border-radius: 8px; padding: 10px; }
   .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground);
     margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
@@ -644,16 +645,18 @@ function getHtml(): string {
   .tl-bar { cursor: pointer; }
   .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px; }
   .tools { display: flex; flex-direction: column; gap: 4px; }
-  .tool-row { display: flex; align-items: center; gap: 8px; }
+  .tool-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .tool-row .bar-wrap { flex: 1; height: 10px; display: flex; align-items: center; min-width: 40px; }
   .tool-row .bar { height: 10px; border-radius: 3px; background: var(--vscode-charts-blue, #3794ff); }
-  .tool-row .n { width: 82px; flex: none; } .tool-row .c { width: 32px; text-align: right; flex: none; color: var(--vscode-descriptionForeground); }
+  .tool-row .n { width: 110px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-row .c { width: 32px; text-align: right; flex: none; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
   .stats { display: flex; gap: 16px; flex-wrap: wrap; }
   .stat b { font-size: 18px; display: block; } .stat span { color: var(--vscode-descriptionForeground); font-size: 11px; }
   .feed { max-height: 380px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
   .ev { display: flex; gap: 8px; padding: 3px 4px; border-radius: 4px; align-items: baseline; }
   .ev:hover { background: var(--vscode-list-hoverBackground); }
-  .ev .t { color: var(--vscode-descriptionForeground); flex: none; width: 58px; font-variant-numeric: tabular-nums; }
-  .ev .k { flex: none; width: 70px; font-weight: 600; }
+  .ev .t { color: var(--vscode-descriptionForeground); flex: none; width: 75px; font-variant-numeric: tabular-nums; }
+  .ev .k { flex: none; width: 85px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ev .dur { flex: none; width: 44px; text-align: right; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
   .ev .d { color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .empty { color: var(--vscode-descriptionForeground); white-space: pre-wrap; padding: 20px; text-align: center; }
@@ -691,9 +694,19 @@ function getHtml(): string {
 <div id="empty" class="empty" style="display:none"></div>
 
 <div id="main">
-  <div class="card" style="margin-bottom:14px">
-    <h2 style="margin-bottom:6px">Tổng quan <span class="help" data-tip="Số liệu tổng của session hiện tại: số file Claude đã đụng vào, tổng số lần gọi tool, số prompt bạn đã gửi, tổng output token, và chi phí ước tính.">?</span></h2>
-    <div class="stats" id="stats"></div>
+  <div class="top-grid">
+    <div class="card">
+      <h2>Cost & tokens <span class="help" data-tip="Chi phí ước tính của session, tính từ token đã dùng nhân đơn giá theo model. output/input = token sinh ra/nhận vào. cache write/read = token ghi/đọc từ prompt cache (rẻ hơn nhiều). Đây là ƯỚC TÍNH theo bảng giá tham khảo, không phải hóa đơn thật.">?</span></h2>
+      <div id="cost"></div>
+    </div>
+    <div class="card">
+      <h2>Models & agents <span class="help" data-tip="Model nào đang thực thi và subagent nào được spawn. 'models' = các model xuất hiện trong session (kèm số message + output token). 'subagents' = các agent con Claude gọi qua tool Task (vd Explore, general-purpose); chấm xanh nhấp nháy = đang chạy. side-msgs = số message chạy trong nhánh subagent.">?</span></h2>
+      <div id="agents"></div>
+    </div>
+    <div class="card">
+      <h2>Tổng quan <span class="help" data-tip="Số liệu tổng của session hiện tại: số file Claude đã đụng vào, tổng số lần gọi tool, số prompt bạn đã gửi, và các thông tin thống kê khác.">?</span></h2>
+      <div id="stats" style="display:flex; flex-direction:column; gap:4px;"></div>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -721,14 +734,6 @@ function getHtml(): string {
       </details>
     </div>
     <div style="display:flex; flex-direction:column; gap:14px;">
-      <div class="card">
-        <h2>Cost & tokens <span class="help" data-tip="Chi phí ước tính của session, tính từ token đã dùng nhân đơn giá theo model. output/input = token sinh ra/nhận vào. cache write/read = token ghi/đọc từ prompt cache (rẻ hơn nhiều). Đây là ƯỚC TÍNH theo bảng giá tham khảo, không phải hóa đơn thật.">?</span></h2>
-        <div id="cost"></div>
-      </div>
-      <div class="card">
-        <h2>Models & agents <span class="help" data-tip="Model nào đang thực thi và subagent nào được spawn. 'models' = các model xuất hiện trong session (kèm số message + output token). 'subagents' = các agent con Claude gọi qua tool Task (vd Explore, general-purpose); chấm xanh nhấp nháy = đang chạy. side-msgs = số message chạy trong nhánh subagent.">?</span></h2>
-        <div id="agents"></div>
-      </div>
       <div class="card">
         <h2>Tool usage <span class="help" data-tip="Tổng số lần mỗi loại tool được gọi trong session (Read, Edit, Bash, Grep, Task...). Thanh dài = dùng nhiều.">?</span></h2>
         <div class="tools" id="tools"></div>
@@ -886,7 +891,7 @@ function renderTools(tools){
   const el=document.getElementById('tools'); el.innerHTML='';
   const max=Math.max(1,...tools.map(t=>t.count));
   for(const t of tools){ const row=document.createElement('div'); row.className='tool-row';
-    row.innerHTML='<span class="n">'+t.name+'</span><div class="bar" style="width:'+(t.count/max*150)+'px;background:'+colorForTool(t.name)+'"></div><span class="c">'+t.count+'</span>';
+    row.innerHTML='<span class="n" title="'+escapeHtml(t.name)+'">'+t.name+'</span><div class="bar-wrap"><div class="bar" style="width:'+(t.count/max*100)+'%;background:'+colorForTool(t.name)+'"></div></div><span class="c">'+t.count+'</span>';
     el.appendChild(row); }
 }
 function renderFeed(activity){
@@ -914,7 +919,7 @@ function renderAgents(st){
         (a.running?'<span class="pill running" style="padding:0 6px"><span class="dot"></span></span> ':'')+a.type+
         '</span><span class="c" style="width:auto;margin:0 6px">×'+a.count+'</span><span class="d">'+escapeHtml(a.lastDesc||'')+'</span></div>').join('');
   } else {
-    aw.innerHTML='<div class="muted">Chưa spawn subagent nào (Task). Model chính: '+(st.model||'?')+'</div>';
+    aw.innerHTML='<div class="muted" style="font-style:italic">Chưa spawn subagent nào (Task)</div>';
   }
   el.appendChild(aw);
 }
@@ -928,9 +933,13 @@ function renderCost(st){
 }
 function renderStats(st){
   const el=document.getElementById('stats'), t=st.tokens;
-  el.innerHTML = stat(st.files.length,'files') + stat(st.tools.reduce((s,x)=>s+x.count,0),'tool calls')
-    + stat((st.promptMarks||[]).length,'prompts') + stat(fmt(t.output),'out tokens') + stat('$'+st.costUsd.toFixed(2),'cost est');
-  function stat(v,l){ return '<div class="stat"><b>'+v+'</b><span>'+l+'</span></div>'; }
+  el.innerHTML =
+    '<div style="font-size:22px;font-weight:700">'+st.files.length+' files</div>'+
+    '<div class="muted" style="margin-bottom:6px">đã tương tác</div>'+
+    row('Tool calls', st.tools.reduce((s,x)=>s+x.count,0)) +
+    row('User prompts', (st.promptMarks||[]).length) +
+    row('Output tokens', fmt(t.output));
+  function row(l,v){ return '<div style="display:flex;justify-content:space-between"><span class="muted">'+l+'</span><span style="font-weight:600">'+v+'</span></div>'; }
 }
 function renderSessions(st){
   const sel=document.getElementById('session'); const cur=sel.value;

@@ -2,6 +2,13 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.1] - 2026-07-16
+- Improved **Claude Task Monitor** UI layout & compactness:
+  - Repositioned **Cost & tokens**, **Models & agents**, and **Overview** to the top in a responsive grid.
+  - Redesigned **Overview** as a vertical stat card matching the layout of the **Cost** card.
+  - Fixed **Tool usage** horizontal bar chart overlapping bug by using responsive flex percentages.
+  - Fixed time column formatting in **Activity feed** to prevent ugly wrapping.
+
 ## [0.2.0] - 2026-07-16
 - Added **Claude Task Monitor** featuring:
   - Hub-and-spoke agent orchestration diagram showing the main model and spawned subagents.

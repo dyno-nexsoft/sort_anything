@@ -2,7 +2,7 @@
   "name": "dyno-extension",
   "displayName": "Dyno Extension",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
