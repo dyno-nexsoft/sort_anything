@@ -57,6 +57,11 @@
         "command": "dynoExtension.generateCommitMessage",
         "title": "Generate Commit Message with AI",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "dynoExtension.showClaudeMonitor",
+        "title": "Claude Task Monitor",
+        "icon": "$(graph)"
       }
     ],
     "menus": {

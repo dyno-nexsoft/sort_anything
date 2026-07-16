@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
 import { generateBarrelFile } from './barrelGenerator';
 import { generateCommitMessage } from './commitGenerator';
+import { openClaudeMonitor } from './claudeMonitor';
 import { logInfo } from './utils';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -60,11 +61,17 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const claudeMonitorDisposable = vscode.commands.registerCommand(
+        'dynoExtension.showClaudeMonitor',
+        () => openClaudeMonitor(context)
+    );
+
     context.subscriptions.push(
         sortDocumentDisposable,
         sortSelectionDisposable,
         generateBarrelDisposable,
-        generateCommitDisposable
+        generateCommitDisposable,
+        claudeMonitorDisposable
     );
 }
 
