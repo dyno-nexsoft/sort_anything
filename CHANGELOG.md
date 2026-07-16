@@ -2,6 +2,14 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.3] - 2026-07-16
+- Enhanced **Claude Task Monitor** UI/UX layout:
+  - Increased the right sidebar width from `320px` to `380px` to give more horizontal space for tool progress bars and activity details.
+  - Compacted the Activity feed time column font size (`11px`) and width (`68px`) to prevent ugly wrapping.
+  - Implemented collapsible prompt turns in the Activity feed with state preservation (manually expanded/collapsed turns are remembered across renders).
+  - Added thin custom styled scrollbars utilizing VS Code theme scrollbar colors.
+  - Adjusted responsive grid wrap breakpoint from `780px` to `900px`.
+
 ## [0.2.2] - 2026-07-16
 - Redesigned UI/UX of **Claude Task Monitor**:
   - Grouped **Activity feed** by user prompt/turn into collapsible blocks with a timeline stem line on the left.

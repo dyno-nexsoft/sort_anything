@@ -618,6 +618,10 @@ function getHtml(): string {
   :root { color-scheme: light dark; }
   body { font-family: var(--vscode-font-family); font-size: 13px; color: var(--vscode-foreground);
     background: var(--vscode-editor-background); margin: 0; padding: 12px; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, rgba(128,128,128,.3)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, rgba(128,128,128,.5)); }
   header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   .muted { color: var(--vscode-descriptionForeground); font-size: 12px; }
@@ -636,8 +640,8 @@ function getHtml(): string {
   .ag-pulse { animation: pulse 1.2s infinite; }
   .ag-flow { animation: flow 0.6s linear infinite; }
   @keyframes flow { to { stroke-dashoffset: -18; } }
-  .grid { display: grid; grid-template-columns: 1fr 320px; gap: 14px; align-items: start; }
-  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  .grid { display: grid; grid-template-columns: 1fr 380px; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
   .top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; }
   .card { border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); border-radius: 8px; padding: 10px; }
   .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground);
@@ -666,7 +670,7 @@ function getHtml(): string {
   .feed { max-height: 380px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
   .ev { display: flex; gap: 8px; padding: 3px 4px; border-radius: 4px; align-items: baseline; }
   .ev:hover { background: var(--vscode-list-hoverBackground); }
-  .ev .t { color: var(--vscode-descriptionForeground); flex: none; width: 75px; font-variant-numeric: tabular-nums; }
+  .ev .t { color: var(--vscode-descriptionForeground); flex: none; width: 68px; font-size: 11px; font-variant-numeric: tabular-nums; }
   .ev .k { flex: none; width: 85px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ev .dur { flex: none; width: 44px; text-align: right; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
   .ev .d { color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -686,7 +690,9 @@ function getHtml(): string {
     background: var(--vscode-editorHoverWidget-background, #252526); color: var(--vscode-editorHoverWidget-foreground, #ccc);
     border: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.4)); box-shadow: 0 4px 14px rgba(0,0,0,.4); display: none; }
   .turn { margin-bottom: 12px; border-left: 2px solid var(--vscode-panel-border, rgba(128,128,128,.3)); padding-left: 10px; }
-  .turn-header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; font-weight: 600; color: var(--vscode-foreground); }
+  .turn-header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; font-weight: 600; color: var(--vscode-foreground); cursor: pointer; user-select: none; }
+  .turn-header:hover { opacity: 0.85; }
+  .turn-header .arrow { width: 12px; display: inline-block; text-align: center; color: var(--vscode-descriptionForeground); font-size: 9px; flex: none; font-family: monospace; }
   .turn-num { color: var(--vscode-textLink-foreground, #3794ff); font-size: 11px; text-transform: uppercase; font-weight: 700; flex: none; }
   .turn-time { color: var(--vscode-descriptionForeground); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
   .turn-text { color: var(--vscode-foreground); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-weight: normal; opacity: 0.85; }
@@ -770,6 +776,7 @@ const vscode = acquireVsCodeApi();
 let last = null;
 let zoom = 1;
 let filterTool = '';
+const userToggledTurns = {};
 
 function fmt(n){ n=Math.round(n); return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
 function hhmm(ts){ if(!ts) return ''; const d=new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
@@ -968,6 +975,13 @@ function renderFeed(st){
     const pText = g.prompt.text || 'User Prompt';
     const pTime = hhmm(g.prompt.ts);
     
+    // Expand/collapse state logic:
+    // Default: expanded for newest turn, collapsed for older ones
+    let isExpanded = (i === groups.length - 1);
+    if (userToggledTurns[g.prompt.ts] !== undefined) {
+      isExpanded = userToggledTurns[g.prompt.ts];
+    }
+    
     let callsHtml = '';
     for (const a of g.calls) {
       callsHtml += '<div class="ev">' +
@@ -979,12 +993,15 @@ function renderFeed(st){
     }
     
     turnDiv.innerHTML = 
-      '<div class="turn-header" title="' + escapeHtml(pText) + '">' +
+      '<div class="turn-header" data-ts="' + g.prompt.ts + '" title="' + escapeHtml(pText) + '">' +
+        '<span class="arrow">' + (isExpanded ? '▼' : '▶') + '</span>' +
         '<span class="turn-num">Turn #' + (i + 1) + '</span>' +
         '<span class="turn-time">' + pTime + '</span>' +
         '<span class="turn-text">' + escapeHtml(pText) + '</span>' +
       '</div>' +
-      '<div class="turn-body">' + (callsHtml || '<div class="muted" style="font-style:italic;padding-left:12px;">Không gọi tool nào</div>') + '</div>';
+      '<div class="turn-body" style="display:' + (isExpanded ? 'block' : 'none') + '">' + 
+        (callsHtml || '<div class="muted" style="font-style:italic;padding-left:12px;">Không gọi tool nào</div>') + 
+      '</div>';
       
     el.appendChild(turnDiv);
   }
@@ -1105,6 +1122,26 @@ document.getElementById('zoom-in').addEventListener('click', ()=>{ zoom=Math.min
 document.getElementById('zoom-out').addEventListener('click', ()=>{ zoom=Math.max(1,zoom/1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-reset').addEventListener('click', ()=>{ zoom=1; if(last) renderTimeline(last); });
 document.querySelector('.tl-wrap').addEventListener('wheel', e=>{ if(e.ctrlKey||e.metaKey){ e.preventDefault(); zoom=Math.min(20,Math.max(1, zoom*(e.deltaY<0?1.2:0.83))); if(last) renderTimeline(last); } }, {passive:false});
+
+// ---- turn expand/collapse click handler ----
+document.getElementById('feed').addEventListener('click', e => {
+  const header = e.target.closest('.turn-header');
+  if (!header) return;
+  const turn = header.parentElement;
+  const body = turn.querySelector('.turn-body');
+  const arrow = header.querySelector('.arrow');
+  const promptTs = Number(header.getAttribute('data-ts'));
+  
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    if (arrow) arrow.textContent = '▼';
+    userToggledTurns[promptTs] = true;
+  } else {
+    body.style.display = 'none';
+    if (arrow) arrow.textContent = '▶';
+    userToggledTurns[promptTs] = false;
+  }
+});
 
 // ---- click-to-show help tooltips ------------------------------------------
 const tip=document.getElementById('tip');
