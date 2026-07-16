@@ -2,6 +2,16 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.0] - 2026-07-16
+- Added **Claude Task Monitor** featuring:
+  - Hub-and-spoke agent orchestration diagram showing the main model and spawned subagents.
+  - Live status tracking with color-coding (running = pulsing blue, done = green, failed = red).
+  - Cost and token counters estimating usage per model (Sonnet, Haiku, Opus).
+  - Interactive file list showing changed/created/deleted files with status badges (M/A/D/?).
+  - Session picker to browse previous transcript files.
+  - Setup commands to install/remove live webhooks in `.claude/settings.json`.
+  - Keyboard shortcut (`Ctrl+Alt+M` / `Cmd+Alt+M`) and dedicated SCM and editor title menu entries.
+
 ## [0.1.0] - 2026-07-09
 - Added **AI Commit Message Generator** featuring:
   - Stable `scm/title` menu integration (✨ sparkle icon on SCM title bar).
