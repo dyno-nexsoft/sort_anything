@@ -62,6 +62,14 @@
         "command": "dynoExtension.showClaudeMonitor",
         "title": "Claude Task Monitor",
         "icon": "$(graph)"
+      },
+      {
+        "command": "dynoExtension.installClaudeMonitorHook",
+        "title": "Claude Task Monitor: Install Live Hook"
+      },
+      {
+        "command": "dynoExtension.uninstallClaudeMonitorHook",
+        "title": "Claude Task Monitor: Remove Live Hook"
       }
     ],
     "menus": {
@@ -90,10 +98,18 @@
           "group": "navigation"
         },
         {
-          "command": "dynoExtension.generateCommitMessage"
+          "command": "dynoExtension.showClaudeMonitor",
+          "group": "navigation"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "dynoExtension.showClaudeMonitor",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m"
+      }
+    ],
     "configuration": {
       "title": "Dyno Extension",
       "properties": {

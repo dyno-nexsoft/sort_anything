@@ -3,6 +3,7 @@ import { sortDocument, sortSelection } from './sorter';
 import { generateBarrelFile } from './barrelGenerator';
 import { generateCommitMessage } from './commitGenerator';
 import { openClaudeMonitor } from './claudeMonitor';
+import { installMonitorHook, uninstallMonitorHook } from './monitorHook';
 import { logInfo } from './utils';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -66,12 +67,42 @@ export function activate(context: vscode.ExtensionContext) {
         () => openClaudeMonitor(context)
     );
 
+    const installHookDisposable = vscode.commands.registerCommand(
+        'dynoExtension.installClaudeMonitorHook',
+        async () => {
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!cwd) { vscode.window.showErrorMessage('Claude Monitor: No workspace folder open.'); return; }
+            try {
+                const msg = await installMonitorHook(cwd);
+                vscode.window.showInformationMessage(`Claude Monitor: ${msg}`);
+            } catch (e) {
+                vscode.window.showErrorMessage(`Claude Monitor: ${(e as Error).message}`);
+            }
+        }
+    );
+
+    const uninstallHookDisposable = vscode.commands.registerCommand(
+        'dynoExtension.uninstallClaudeMonitorHook',
+        async () => {
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!cwd) { vscode.window.showErrorMessage('Claude Monitor: No workspace folder open.'); return; }
+            try {
+                const msg = await uninstallMonitorHook(cwd);
+                vscode.window.showInformationMessage(`Claude Monitor: ${msg}`);
+            } catch (e) {
+                vscode.window.showErrorMessage(`Claude Monitor: ${(e as Error).message}`);
+            }
+        }
+    );
+
     context.subscriptions.push(
         sortDocumentDisposable,
         sortSelectionDisposable,
         generateBarrelDisposable,
         generateCommitDisposable,
-        claudeMonitorDisposable
+        claudeMonitorDisposable,
+        installHookDisposable,
+        uninstallHookDisposable
     );
 }
 
