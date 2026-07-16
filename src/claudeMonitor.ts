@@ -13,6 +13,10 @@ import { MonitorHookServer } from './monitorHook';
  * the current workspace, by tailing Claude Code's transcript JSONL files under
  * ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl.
  *
+ * The main visual is a hub-and-spoke diagram: the central hub is the main
+ * (orchestrator) agent; each spoke is a subagent invoked via the Task tool.
+ * Files touched are shown as a compact list beneath it.
+ *
  * Data sources:
  *   - transcript JSONL (authoritative, full history) — parsed incrementally
  *   - optional PostToolUse/UserPromptSubmit/Stop hook (near-instant "poke")
@@ -110,6 +114,18 @@ interface ActivityItem {
     linesChanged: number;
 }
 
+/** One invocation of a subagent via the Task tool (a spoke off the main agent). */
+interface AgentRun {
+    id: string;
+    type: string;        // subagent_type, e.g. "Explore", "general-purpose"
+    desc: string;
+    ts: number;
+    durationMs: number;  // -1 = still running
+    running: boolean;
+    toolCount: number;   // tools the subagent ran (from Task result summary, if present)
+    tokens: number;      // subagent tokens (from Task result summary, if present)
+}
+
 interface MonitorState {
     title: string;
     sessionId: string;
@@ -125,6 +141,9 @@ interface MonitorState {
     status: { kind: 'running' | 'thinking' | 'idle' | 'waiting'; label: string; tool?: string };
     models: { name: string; messages: number; output: number }[];
     agents: { type: string; count: number; lastDesc: string; running: boolean }[];
+    agentRuns: AgentRun[];
+    mainToolCalls: number;
+    sidechainToolCalls: number;
     sidechainMsgs: number;
     git: { [rel: string]: string };      // rel path -> status code (M/A/D/?/R/U)
     sessions: { id: string; title: string; file: string; active: boolean }[];
@@ -172,7 +191,10 @@ class TranscriptAggregator {
     // model + subagent tracking
     private models = new Map<string, { messages: number; output: number }>();
     private agents = new Map<string, { count: number; lastDesc: string; lastId: string }>();
+    private agentRuns = new Map<string, AgentRun>();     // keyed by Task tool_use id
     private sidechainMsgs = 0;
+    private mainToolCalls = 0;
+    private sidechainToolCalls = 0;
 
     // rolling record of the very last meaningful event, for status detection
     private lastToolUsePending: { id: string; tool: string; ts: number } | undefined;
@@ -189,7 +211,8 @@ class TranscriptAggregator {
         this.activity = []; this.activityById.clear(); this.toolStart.clear();
         this.promptMarks = [];
         this.tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-        this.models.clear(); this.agents.clear(); this.sidechainMsgs = 0;
+        this.models.clear(); this.agents.clear(); this.agentRuns.clear();
+        this.sidechainMsgs = 0; this.mainToolCalls = 0; this.sidechainToolCalls = 0;
         this.lastToolUsePending = undefined; this.pendingIds.clear();
         this.title = ''; this.sessionId = ''; this.gitBranch = ''; this.model = '';
     }
@@ -268,7 +291,8 @@ class TranscriptAggregator {
             if (Array.isArray(m.content)) {
                 for (const c of m.content) {
                     if (c.type !== 'tool_use') { continue; }
-                    this.onToolUse(c, toTime(o.timestamp));
+                    if (o.isSidechain) { this.sidechainToolCalls++; } else { this.mainToolCalls++; }
+                    this.onToolUse(c, toTime(o.timestamp), !!o.isSidechain);
                 }
             }
             return;
@@ -296,7 +320,7 @@ class TranscriptAggregator {
         }
     }
 
-    private onToolUse(c: any, ts: number) {
+    private onToolUse(c: any, ts: number, isSidechain: boolean) {
         const name: string = c.name || 'unknown';
         this.tools.set(name, (this.tools.get(name) || 0) + 1);
         const input = c.input || {};
@@ -319,6 +343,9 @@ class TranscriptAggregator {
             const a = this.agents.get(agentType) || { count: 0, lastDesc: '', lastId: '' };
             a.count++; a.lastDesc = desc; a.lastId = c.id || '';
             this.agents.set(agentType, a);
+            if (!isSidechain && c.id) {   // a spoke off the main agent
+                this.agentRuns.set(c.id, { id: c.id, type: agentType, desc, ts, durationMs: -1, running: true, toolCount: 0, tokens: 0 });
+            }
             detail = `${agentType}: ${desc}`;
         } else if (input.file_path) {
             filePath = String(input.file_path);
@@ -343,6 +370,17 @@ class TranscriptAggregator {
         const start = toolUseId ? this.toolStart.get(toolUseId) : undefined;
         const item = toolUseId ? this.activityById.get(toolUseId) : undefined;
         if (item && start && ts >= start.ts) { item.durationMs = ts - start.ts; }
+
+        // a subagent (Task) finished — complete its spoke
+        const run = toolUseId ? this.agentRuns.get(toolUseId) : undefined;
+        if (run) {
+            run.running = false;
+            if (start && ts >= start.ts) { run.durationMs = ts - start.ts; }
+            if (toolUseResult && typeof toolUseResult === 'object') {
+                run.toolCount = Number(toolUseResult.totalToolUseCount ?? toolUseResult.toolUseCount ?? run.toolCount) || 0;
+                run.tokens = Number(toolUseResult.totalTokens ?? toolUseResult.usage?.output_tokens ?? run.tokens) || 0;
+            }
+        }
 
         // lines changed from a write result
         if (toolUseResult && typeof toolUseResult === 'object') {
@@ -384,11 +422,15 @@ class TranscriptAggregator {
             .map(([type, v]) => ({ type, count: v.count, lastDesc: v.lastDesc, running: !!v.lastId && this.pendingIds.has(v.lastId) }))
             .sort((a, b) => Number(b.running) - Number(a.running) || b.count - a.count);
 
+        const agentRuns = [...this.agentRuns.values()].sort((a, b) => a.ts - b.ts);
+
         return {
             title: this.title, sessionId: this.sessionId, gitBranch: this.gitBranch, model: this.model,
             files, tools, activity, promptMarks: this.promptMarks.slice(),
             tokens: { ...this.tokens }, costUsd: cost, status,
-            models, agents, sidechainMsgs: this.sidechainMsgs,
+            models, agents, agentRuns,
+            mainToolCalls: this.mainToolCalls, sidechainToolCalls: this.sidechainToolCalls,
+            sidechainMsgs: this.sidechainMsgs,
         };
     }
 }
@@ -543,14 +585,14 @@ function emptyState(cwd: string, error: string): MonitorState {
         files: [], tools: [], activity: [], promptMarks: [],
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
         status: { kind: 'idle', label: 'No session' },
-        models: [], agents: [], sidechainMsgs: 0,
+        models: [], agents: [], agentRuns: [], mainToolCalls: 0, sidechainToolCalls: 0, sidechainMsgs: 0,
         git: {}, sessions: [],
         updatedAt: Date.now(), hook: false, error,
     };
 }
 
 // ---------------------------------------------------------------------------
-// Webview HTML (self-contained: nested squarified treemap + zoomable timeline)
+// Webview HTML (self-contained: hub-and-spoke agent graph + zoomable timeline)
 // ---------------------------------------------------------------------------
 
 function getHtml(): string {
@@ -578,15 +620,23 @@ function getHtml(): string {
   .pill.waiting { background: rgba(210,153,34,.2); color: #d29922; } .pill.waiting .dot { background:#d29922; }
   .pill.idle { background: rgba(139,148,158,.2); color: #8b949e; } .pill.idle .dot { background:#8b949e; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .ag-pulse { animation: pulse 1.2s infinite; }
+  .ag-flow { animation: flow 0.6s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -18; } }
   .grid { display: grid; grid-template-columns: 1fr 320px; gap: 14px; align-items: start; }
   @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
   .card { border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); border-radius: 8px; padding: 10px; }
   .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground);
     margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
   .card h2 .sp { flex: 1; }
-  #treemap { width: 100%; height: 460px; display: block; }
-  .tm-leaf rect { cursor: pointer; }
-  .tm-leaf text, .tm-hdr { pointer-events: none; }
+  #agraph { width: 100%; height: 460px; display: block; }
+  .ag-node { cursor: pointer; }
+  .ag-node:hover circle { stroke-width: 2.5; }
+  .fl { display: flex; gap: 6px; align-items: baseline; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+  .fl:hover { background: var(--vscode-list-hoverBackground); }
+  .fl .g { flex: none; width: 14px; font-weight: 700; font-size: 10px; }
+  .fl .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .fl .n { flex: none; color: var(--vscode-descriptionForeground); font-size: 11px; }
   .tl-wrap { overflow-x: auto; overflow-y: hidden; }
   #timeline { height: 64px; display: block; }
   .tl-bar { cursor: pointer; }
@@ -657,15 +707,16 @@ function getHtml(): string {
 
   <div class="grid">
     <div class="card">
-      <h2>Files touched <span class="help" data-tip="Treemap các file Claude đã đọc/sửa. Mỗi ô = 1 file, gom theo thư mục (viền + màu). DIỆN TÍCH ô = số lần đụng (chế độ 'touches') hoặc số dòng thêm/xoá (chế độ 'lines'). Góc phải mỗi ô: trạng thái git (M/A/D). Click = mở file, Shift+click = hiện trong Explorer. Chỉ file được Read/Edit/Write mới hiện — Bash thuần thì không.">?</span>
+      <h2>Agent orchestration <span class="help" data-tip="Sơ đồ hub-and-spoke: vòng tròn giữa là AGENT CHÍNH (orchestrator, chạy model chính). Mỗi nhánh toả ra = 1 lần agent chính gọi subagent qua tool Task. Node nhánh ghi loại subagent + trạng thái; nhánh/viền nhấp nháy = đang chạy; node càng to = subagent dùng càng nhiều tool. Hover node để xem mô tả, thời gian, số tool và token. Danh sách file gom vào mục 'Files touched' phía dưới.">?</span>
         <span class="sp" style="flex:1"></span>
-        <span class="seg">
-          <button id="m-touch" class="on">touches</button>
-          <button id="m-lines">lines</button>
-        </span>
+        <span class="muted" id="ag-info"></span>
       </h2>
-      <svg id="treemap" preserveAspectRatio="none"></svg>
-      <div class="legend" id="tm-legend"></div>
+      <svg id="agraph" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend" id="ag-legend"></div>
+      <details style="margin-top:8px">
+        <summary class="muted" style="cursor:pointer">Files touched (<span id="files-count">0</span>)</summary>
+        <div id="files-list" style="margin-top:6px; max-height:160px; overflow:auto; display:flex; flex-direction:column; gap:2px;"></div>
+      </details>
     </div>
     <div style="display:flex; flex-direction:column; gap:14px;">
       <div class="card">
@@ -693,7 +744,6 @@ function getHtml(): string {
 <script>
 const vscode = acquireVsCodeApi();
 let last = null;
-let metric = 'touch';       // 'touch' | 'lines'
 let zoom = 1;
 let filterTool = '';
 
@@ -704,102 +754,84 @@ function escapeHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':
 
 const palette = ['#3794ff','#3fb950','#d29922','#a371f7','#f78166','#56d4bb','#db61a2','#e3b341'];
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
-function topDir(rel){ return rel.includes('/') ? rel.slice(0, rel.indexOf('/')) : '(root)'; }
-function colorForTop(top){ return palette[hashStr(top) % palette.length]; }
 function colorForTool(name){ return palette[hashStr(name) % palette.length]; }
+function gitColor(gs){ return gs==='M'?'#d29922':(gs==='A'||gs==='?')?'#3fb950':gs==='D'?'#f85149':'var(--vscode-descriptionForeground)'; }
 
-// ---- squarified treemap (returns rects assigned onto items) ----------------
-function squarify(items, x, y, w, h){
-  const total = items.reduce((s,it)=>s+it.value,0) || 1;
-  for(const it of items){ it.area = it.value/total * (w*h); }
-  let rx=x, ry=y, rw=w, rh=h, row=[];
-  const worst=(row,len)=>{ const s=row.reduce((a,b)=>a+b.area,0), mx=Math.max(...row.map(r=>r.area)), mn=Math.min(...row.map(r=>r.area)); const l2=len*len,s2=s*s; return Math.max((l2*mx)/s2, s2/(l2*mn)); };
-  const layoutRow=(row,horizontal)=>{ const s=row.reduce((a,b)=>a+b.area,0);
-    if(horizontal){ const rowH=s/rw; let cx=rx; for(const r of row){ const cw=r.area/rowH; r.rect={x:cx,y:ry,w:cw,h:rowH}; cx+=cw; } ry+=rowH; rh-=rowH; }
-    else { const rowW=s/rh; let cy=ry; for(const r of row){ const ch=r.area/rowW; r.rect={x:rx,y:cy,w:rowW,h:ch}; cy+=ch; } rx+=rowW; rw-=rowW; } };
-  let i=0;
-  while(i<items.length){ const horizontal=rw>=rh, len=horizontal?rw:rh, next=items[i];
-    if(row.length===0){ row.push(next); i++; continue; }
-    if(worst([...row,next],len) <= worst(row,len)){ row.push(next); i++; }
-    else { layoutRow(row,horizontal); row=[]; } }
-  if(row.length) layoutRow(row, rw>=rh);
-}
+// ---- hub-and-spoke agent orchestration diagram -----------------------------
+function svgEl(ns,tag,attrs){ const e=document.createElementNS(ns,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
 
-// ---- nested treemap --------------------------------------------------------
-function metricVal(f){ return metric==='lines' ? (f.linesAdded+f.linesRemoved) : f.total; }
-function buildTree(files){
-  const root={name:'',children:[],map:{},value:0,leaf:false};
-  for(const f of files){
-    const val=metricVal(f); if(val<=0) continue;
-    const parts=f.rel.split('/'); let node=root;
-    for(let i=0;i<parts.length;i++){ const p=parts[i], last=i===parts.length-1;
-      if(last){ node.children.push({name:p,leaf:true,f,value:val,children:[]}); }
-      else { if(!node.map[p]){ const c={name:p,leaf:false,children:[],map:{},value:0}; node.map[p]=c; node.children.push(c);} node=node.map[p]; } }
-  }
-  return root;
-}
-function layoutTree(node,x,y,w,h,depth,out){
-  const kids=node.children.filter(c=>c.value>0);
-  if(!kids.length) return;
-  const items=kids.map(c=>({value:c.value, ref:c}));
-  squarify(items,x,y,w,h);
-  for(const it of items){ const r=it.rect, c=it.ref; if(!r||r.w<2||r.h<2) continue;
-    out.push({r,node:c,depth});
-    if(!c.leaf){ const hd=(r.w>54&&r.h>26)?15:0, pad=2;
-      const ix=r.x+pad, iy=r.y+hd+pad, iw=r.w-2*pad, ih=r.h-hd-2*pad;
-      if(iw>4&&ih>4) layoutTree(c,ix,iy,iw,ih,depth+1,out); } }
-}
-function renderTreemap(st){
-  const svg=document.getElementById('treemap'); svg.innerHTML='';
-  const legend=document.getElementById('tm-legend');
-  const W=svg.clientWidth||600, H=460; svg.setAttribute('viewBox','0 0 '+W+' '+H);
-  const root=buildTree(st.files);
-  if(!root.children.length){
-    const ns0='http://www.w3.org/2000/svg'; const t=document.createElementNS(ns0,'text');
-    t.setAttribute('x',W/2); t.setAttribute('y',H/2); t.setAttribute('text-anchor','middle');
-    t.setAttribute('fill','var(--vscode-descriptionForeground)'); t.setAttribute('font-size','12');
-    t.textContent = metric==='lines' ? 'Chưa có dòng nào được thêm/xoá' : 'Chưa có file nào được đọc/sửa (Claude mới chạy Bash?)';
-    svg.appendChild(t);
-    legend.innerHTML='<span>Ô sẽ xuất hiện khi Claude Read/Edit/Write file</span>'; return; }
-  const out=[]; layoutTree(root,0,0,W,H,0,out);
+function renderAgentGraph(st){
+  const svg=document.getElementById('agraph'); svg.innerHTML='';
+  const legend=document.getElementById('ag-legend'); legend.innerHTML='';
   const ns='http://www.w3.org/2000/svg';
-  for(const cell of out){ const {r,node}=cell;
-    if(node.leaf){
-      const f=node.f, g=document.createElementNS(ns,'g'); g.setAttribute('class','tm-leaf');
-      const rect=document.createElementNS(ns,'rect');
-      rect.setAttribute('x',r.x); rect.setAttribute('y',r.y);
-      rect.setAttribute('width',Math.max(0,r.w)); rect.setAttribute('height',Math.max(0,r.h));
-      rect.setAttribute('fill',colorForTop(topDir(f.rel))); rect.setAttribute('fill-opacity','0.85');
-      rect.setAttribute('stroke','var(--vscode-editor-background)'); rect.setAttribute('stroke-width','1');
-      const gs=st.git[f.rel];
-      rect.innerHTML='<title>'+escapeHtml(f.rel)+'\\n'+f.total+' touches · +'+f.linesAdded+'/-'+f.linesRemoved+' lines'+(gs?(' · git '+gs):'')+'\\nclick: mở · shift+click: reveal</title>';
-      rect.addEventListener('click',(e)=> vscode.postMessage({type: e.shiftKey?'reveal':'open', path: f.path}));
-      g.appendChild(rect);
-      if(r.w>44 && r.h>16){ const t=document.createElementNS(ns,'text');
-        t.setAttribute('x',r.x+4); t.setAttribute('y',r.y+13); t.setAttribute('fill','#fff'); t.setAttribute('font-size','10');
-        const nm=node.name; t.textContent = nm.length*6>r.w-8 ? nm.slice(0,Math.max(1,Math.floor((r.w-8)/6)))+'…' : nm; g.appendChild(t); }
-      if(gs && r.w>16 && r.h>16){ const b=document.createElementNS(ns,'text');
-        b.setAttribute('x',r.x+r.w-4); b.setAttribute('y',r.y+r.h-4); b.setAttribute('text-anchor','end');
-        b.setAttribute('font-size','9'); b.setAttribute('font-weight','700');
-        b.setAttribute('fill', gs==='M'?'#d29922':gs==='A'||gs==='?'?'#3fb950':gs==='D'?'#f85149':'#8b949e');
-        b.textContent=gs; b.setAttribute('class','tm-hdr'); g.appendChild(b); }
-      svg.appendChild(g);
-    } else {
-      const rect=document.createElementNS(ns,'rect');
-      rect.setAttribute('x',r.x); rect.setAttribute('y',r.y); rect.setAttribute('width',Math.max(0,r.w)); rect.setAttribute('height',Math.max(0,r.h));
-      rect.setAttribute('fill','none'); rect.setAttribute('stroke',colorForTop(node.name)); rect.setAttribute('stroke-opacity','0.5'); rect.setAttribute('stroke-width','1');
-      svg.appendChild(rect);
-      if(r.w>54 && r.h>26){ const t=document.createElementNS(ns,'text');
-        t.setAttribute('x',r.x+4); t.setAttribute('y',r.y+11); t.setAttribute('font-size','10'); t.setAttribute('font-weight','600');
-        t.setAttribute('fill','var(--vscode-descriptionForeground)'); t.setAttribute('class','tm-hdr');
-        t.textContent = node.name.length*6>r.w-8 ? node.name.slice(0,Math.max(1,Math.floor((r.w-8)/6)))+'…' : node.name; svg.appendChild(t); }
-    }
+  const W=svg.clientWidth||600, H=460; svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const cx=W/2, cy=H/2;
+  const runs=(st.agentRuns||[]).slice();
+  const anyRunning=runs.some(r=>r.running);
+
+  document.getElementById('ag-info').textContent =
+    runs.length+' subagent'+(runs.length===1?'':'s')+' · main tools '+(st.mainToolCalls||0)+' · sub tools '+(st.sidechainToolCalls||0);
+
+  // edges first (under nodes)
+  const n=runs.length;
+  const ringR=Math.max(90, Math.min(W,H)/2 - 90);
+  const positions=runs.map((r,i)=>{ const ang=-Math.PI/2 + (n? 2*Math.PI*i/n : 0); return {x:cx+ringR*Math.cos(ang), y:cy+ringR*Math.sin(ang)}; });
+  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i];
+    const line=svgEl(ns,'line',{x1:cx,y1:cy,x2:p.x,y2:p.y,stroke:colorForTool(r.type),'stroke-opacity':r.running?'0.9':'0.4','stroke-width':r.running?'2.5':'1.5'});
+    if(r.running){ line.setAttribute('stroke-dasharray','5,4'); line.setAttribute('class','ag-flow'); }
+    svg.appendChild(line);
   }
-  // legend: top dirs
-  const dt={}; for(const f of st.files){ const v=metricVal(f); if(v>0){ const t=topDir(f.rel); dt[t]=(dt[t]||0)+v; } }
-  legend.innerHTML = Object.entries(dt).sort((a,b)=>b[1]-a[1]).slice(0,8)
-    .map(([d,c])=>'<span><i style="background:'+colorForTop(d)+'"></i>'+d+' ('+fmt(c)+')</span>').join('')
-    + '<span>· click mở · shift+click reveal</span>';
+
+  // spoke nodes
+  for(let i=0;i<runs.length;i++){ const p=positions[i], r=runs[i];
+    const rad=Math.max(16, Math.min(36, 16 + (r.toolCount||0)*1.4));
+    const g=svgEl(ns,'g',{class:'ag-node'});
+    const circ=svgEl(ns,'circle',{cx:p.x,cy:p.y,r:rad,fill:colorForTool(r.type),'fill-opacity':r.running?'0.9':'0.35',stroke:colorForTool(r.type),'stroke-width':r.running?'3':'1.5'});
+    if(r.running){ circ.setAttribute('class','ag-pulse'); }
+    circ.innerHTML='<title>'+escapeHtml(r.type)+(r.running?' (running)':'')+'\\n'+escapeHtml(r.desc||'')+'\\n'+(r.durationMs>=0?('duration '+dur(r.durationMs)):'running')+(r.toolCount?(' · '+r.toolCount+' tools'):'')+(r.tokens?(' · '+fmt(r.tokens)+' tok'):'')+'</title>';
+    g.appendChild(circ);
+    // type label under node
+    const t=svgEl(ns,'text',{x:p.x,y:p.y+rad+13,'text-anchor':'middle','font-size':'11','font-weight':'600',fill:'var(--vscode-foreground)'});
+    t.textContent=r.type.length>16?r.type.slice(0,15)+'…':r.type; g.appendChild(t);
+    const t2=svgEl(ns,'text',{x:p.x,y:p.y+rad+26,'text-anchor':'middle','font-size':'10',fill:'var(--vscode-descriptionForeground)'});
+    t2.textContent=r.running?'running…':dur(r.durationMs); g.appendChild(t2);
+    svg.appendChild(g);
+  }
+
+  // hub (main agent) on top
+  const hubR=44;
+  const hub=svgEl(ns,'circle',{cx,cy,r:hubR,fill:'var(--vscode-editor-background)',stroke:'#3794ff','stroke-width':anyRunning?'3':'2'});
+  if(anyRunning){ hub.setAttribute('class','ag-pulse'); }
+  svg.appendChild(hub);
+  const h1=svgEl(ns,'text',{x:cx,y:cy-4,'text-anchor':'middle','font-size':'12','font-weight':'700',fill:'var(--vscode-foreground)'});
+  h1.textContent='main agent'; svg.appendChild(h1);
+  const h2=svgEl(ns,'text',{x:cx,y:cy+11,'text-anchor':'middle','font-size':'9',fill:'var(--vscode-descriptionForeground)'});
+  h2.textContent=(st.model||'?').replace('claude-',''); svg.appendChild(h2);
+
+  if(!runs.length){
+    const t=svgEl(ns,'text',{x:cx,y:cy+hubR+24,'text-anchor':'middle','font-size':'12',fill:'var(--vscode-descriptionForeground)'});
+    t.textContent='Agent chính đang tự thực thi — chưa gọi subagent (Task) nào'; svg.appendChild(t);
+  }
+
+  // legend: subagent types
+  const byType={}; for(const r of runs){ byType[r.type]=(byType[r.type]||0)+1; }
+  legend.innerHTML=Object.entries(byType).sort((a,b)=>b[1]-a[1])
+    .map(([t,c])=>'<span><i style="background:'+colorForTool(t)+'"></i>'+t+' ('+c+')</span>').join('')
+    + '<span>· node lớn = subagent dùng nhiều tool · hover xem chi tiết</span>';
+}
+
+function renderFilesList(st){
+  document.getElementById('files-count').textContent=String(st.files.length);
+  const el=document.getElementById('files-list'); el.innerHTML='';
+  for(const f of st.files.slice(0,200)){ const gs=st.git[f.rel]||'';
+    const row=document.createElement('div'); row.className='fl'; row.title='click: mở · shift+click: reveal';
+    row.innerHTML='<span class="g" style="color:'+gitColor(gs)+'">'+gs+'</span>'+
+      '<span class="p">'+escapeHtml(f.rel)+'</span>'+
+      '<span class="n">'+f.total+'× +'+f.linesAdded+'/-'+f.linesRemoved+'</span>';
+    row.addEventListener('click',(e)=> vscode.postMessage({type:e.shiftKey?'reveal':'open', path:f.path}));
+    el.appendChild(row);
+  }
+  if(!st.files.length){ el.innerHTML='<span class="muted">Chưa có file nào được Read/Edit/Write</span>'; }
 }
 
 // ---- zoomable timeline -----------------------------------------------------
@@ -914,15 +946,12 @@ function render(st){
   document.getElementById('updated').textContent='cập nhật '+hhmm(st.updatedAt);
   renderSessions(st);
   if(st.error) return;
-  renderStats(st); renderCost(st); renderAgents(st); renderTimeline(st); renderTreemap(st); renderTools(st.tools); renderFilter(st); renderFeed(st.activity);
+  renderStats(st); renderCost(st); renderAgents(st); renderTimeline(st); renderAgentGraph(st); renderFilesList(st); renderTools(st.tools); renderFilter(st); renderFeed(st.activity);
 }
 
 // ---- controls --------------------------------------------------------------
 document.getElementById('session').addEventListener('change', e=> vscode.postMessage({type:'selectSession', file:e.target.value}));
 document.getElementById('filter').addEventListener('change', e=>{ filterTool=e.target.value; if(last) renderFeed(last.activity); });
-document.getElementById('m-touch').addEventListener('click', ()=> setMetric('touch'));
-document.getElementById('m-lines').addEventListener('click', ()=> setMetric('lines'));
-function setMetric(m){ metric=m; document.getElementById('m-touch').classList.toggle('on',m==='touch'); document.getElementById('m-lines').classList.toggle('on',m==='lines'); if(last) renderTreemap(last); }
 document.getElementById('zoom-in').addEventListener('click', ()=>{ zoom=Math.min(20,zoom*1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-out').addEventListener('click', ()=>{ zoom=Math.max(1,zoom/1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-reset').addEventListener('click', ()=>{ zoom=1; if(last) renderTimeline(last); });
@@ -947,7 +976,7 @@ window.addEventListener('resize', hideTip);
 window.addEventListener('scroll', hideTip, true);
 
 window.addEventListener('message', e=>{ if(e.data?.type==='state'){ last=e.data.state; render(last); } });
-window.addEventListener('resize', ()=>{ if(last){ renderTimeline(last); renderTreemap(last); } });
+window.addEventListener('resize', ()=>{ if(last){ renderTimeline(last); renderAgentGraph(last); } });
 vscode.postMessage({type:'ready'});
 </script>
 </body>
