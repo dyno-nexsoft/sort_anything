@@ -100,6 +100,9 @@
         {
           "command": "dynoExtension.showClaudeMonitor",
           "group": "navigation"
+        },
+        {
+          "command": "dynoExtension.generateCommitMessage"
         }
       ]
     },
