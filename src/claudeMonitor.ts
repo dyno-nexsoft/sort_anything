@@ -123,6 +123,9 @@ interface MonitorState {
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
     costUsd: number;
     status: { kind: 'running' | 'thinking' | 'idle' | 'waiting'; label: string; tool?: string };
+    models: { name: string; messages: number; output: number }[];
+    agents: { type: string; count: number; lastDesc: string; running: boolean }[];
+    sidechainMsgs: number;
     git: { [rel: string]: string };      // rel path -> status code (M/A/D/?/R/U)
     sessions: { id: string; title: string; file: string; active: boolean }[];
     updatedAt: number;
@@ -166,8 +169,14 @@ class TranscriptAggregator {
     private promptMarks: number[] = [];
     tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
+    // model + subagent tracking
+    private models = new Map<string, { messages: number; output: number }>();
+    private agents = new Map<string, { count: number; lastDesc: string; lastId: string }>();
+    private sidechainMsgs = 0;
+
     // rolling record of the very last meaningful event, for status detection
     private lastToolUsePending: { id: string; tool: string; ts: number } | undefined;
+    private pendingIds = new Set<string>();
 
     constructor(file: string, cwd: string) {
         this.file = file;
@@ -180,7 +189,8 @@ class TranscriptAggregator {
         this.activity = []; this.activityById.clear(); this.toolStart.clear();
         this.promptMarks = [];
         this.tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-        this.lastToolUsePending = undefined;
+        this.models.clear(); this.agents.clear(); this.sidechainMsgs = 0;
+        this.lastToolUsePending = undefined; this.pendingIds.clear();
         this.title = ''; this.sessionId = ''; this.gitBranch = ''; this.model = '';
     }
 
@@ -242,7 +252,13 @@ class TranscriptAggregator {
 
         if (o.type === 'assistant' && o.message) {
             const m = o.message;
-            if (m.model) { this.model = m.model; }
+            if (m.model) {
+                if (!o.isSidechain) { this.model = m.model; }   // main-chain model shown in header
+                const mm = this.models.get(m.model) || { messages: 0, output: 0 };
+                mm.messages++; mm.output += m.usage?.output_tokens || 0;
+                this.models.set(m.model, mm);
+            }
+            if (o.isSidechain) { this.sidechainMsgs++; }
             if (m.usage) {
                 this.tokens.input += m.usage.input_tokens || 0;
                 this.tokens.output += m.usage.output_tokens || 0;
@@ -297,6 +313,13 @@ class TranscriptAggregator {
         } else if (name === 'Grep' || name === 'Glob') {
             detail = String(input.pattern || '');
             if (input.path) { this.touch(input.path, 'other'); filePath = String(input.path); }
+        } else if (name === 'Task') {
+            const agentType = String(input.subagent_type || 'agent');
+            const desc = String(input.description || input.prompt || '').slice(0, 100);
+            const a = this.agents.get(agentType) || { count: 0, lastDesc: '', lastId: '' };
+            a.count++; a.lastDesc = desc; a.lastId = c.id || '';
+            this.agents.set(agentType, a);
+            detail = `${agentType}: ${desc}`;
         } else if (input.file_path) {
             filePath = String(input.file_path);
             detail = filePath;
@@ -310,10 +333,12 @@ class TranscriptAggregator {
             this.activityById.set(c.id, item);
             this.toolStart.set(c.id, { ts, file: filePath });
             this.lastToolUsePending = { id: c.id, tool: name, ts };
+            this.pendingIds.add(c.id);
         }
     }
 
     private onToolResult(toolUseId: string, ts: number, toolUseResult: any) {
+        if (toolUseId) { this.pendingIds.delete(toolUseId); }
         if (toolUseId && this.lastToolUsePending?.id === toolUseId) { this.lastToolUsePending = undefined; }
         const start = toolUseId ? this.toolStart.get(toolUseId) : undefined;
         const item = toolUseId ? this.activityById.get(toolUseId) : undefined;
@@ -352,10 +377,18 @@ class TranscriptAggregator {
             status = { kind: 'idle', label: 'Idle' };
         }
 
+        const models = [...this.models.entries()]
+            .map(([name, v]) => ({ name, messages: v.messages, output: v.output }))
+            .sort((a, b) => b.messages - a.messages);
+        const agents = [...this.agents.entries()]
+            .map(([type, v]) => ({ type, count: v.count, lastDesc: v.lastDesc, running: !!v.lastId && this.pendingIds.has(v.lastId) }))
+            .sort((a, b) => Number(b.running) - Number(a.running) || b.count - a.count);
+
         return {
             title: this.title, sessionId: this.sessionId, gitBranch: this.gitBranch, model: this.model,
             files, tools, activity, promptMarks: this.promptMarks.slice(),
             tokens: { ...this.tokens }, costUsd: cost, status,
+            models, agents, sidechainMsgs: this.sidechainMsgs,
         };
     }
 }
@@ -509,7 +542,9 @@ function emptyState(cwd: string, error: string): MonitorState {
         title: '', sessionId: '', gitBranch: '', cwd, model: '',
         files: [], tools: [], activity: [], promptMarks: [],
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
-        status: { kind: 'idle', label: 'No session' }, git: {}, sessions: [],
+        status: { kind: 'idle', label: 'No session' },
+        models: [], agents: [], sidechainMsgs: 0,
+        git: {}, sessions: [],
         updatedAt: Date.now(), hook: false, error,
     };
 }
@@ -577,12 +612,20 @@ function getHtml(): string {
   .seg button.on { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
   .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; margin-top: 6px; color: var(--vscode-descriptionForeground); }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%;
+    border: 1px solid var(--vscode-descriptionForeground); color: var(--vscode-descriptionForeground); font-size: 9px;
+    font-weight: 700; cursor: pointer; user-select: none; flex: none; opacity: .7; }
+  .help:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.2)); }
+  #tip { position: fixed; z-index: 1000; max-width: 300px; padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45;
+    background: var(--vscode-editorHoverWidget-background, #252526); color: var(--vscode-editorHoverWidget-foreground, #ccc);
+    border: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.4)); box-shadow: 0 4px 14px rgba(0,0,0,.4); display: none; }
 </style>
 </head>
 <body>
 <header>
   <h1>🔍 Claude Task Monitor</h1>
   <span id="pill" class="pill idle"><span class="dot"></span><span id="pill-label">Idle</span></span>
+  <span class="help" data-tip="Trạng thái hiện tại của Claude: Running = đang chạy tool, Thinking = vừa hoạt động (file transcript mới đổi), Waiting = tool treo/chờ phê duyệt (>45s), Idle = không hoạt động. Bên cạnh: model chính, session, nhánh git, ⚡live = hook real-time đang bật.">?</span>
   <span id="hook" class="badge" title="live hook" style="display:none">⚡ live</span>
   <select id="session" title="Chọn session"></select>
   <span class="sp" style="flex:1"></span>
@@ -592,13 +635,17 @@ function getHtml(): string {
   <button class="btn" onclick="vscode.postMessage({type:'refresh'})">Refresh</button>
 </header>
 
+<div id="tip"></div>
 <div id="empty" class="empty" style="display:none"></div>
 
 <div id="main">
-  <div class="card" style="margin-bottom:14px"><div class="stats" id="stats"></div></div>
+  <div class="card" style="margin-bottom:14px">
+    <h2 style="margin-bottom:6px">Tổng quan <span class="help" data-tip="Số liệu tổng của session hiện tại: số file Claude đã đụng vào, tổng số lần gọi tool, số prompt bạn đã gửi, tổng output token, và chi phí ước tính.">?</span></h2>
+    <div class="stats" id="stats"></div>
+  </div>
 
   <div class="card" style="margin-bottom:14px">
-    <h2>Timeline
+    <h2>Timeline <span class="help" data-tip="Trục thời gian các lần gọi tool. Mỗi vạch = 1 tool call, đặt theo thời điểm gọi, màu theo loại tool. Độ RỘNG vạch = thời gian tool chạy. Đường kẻ đứt = mỗi lần bạn gửi prompt. Ctrl+lăn chuột hoặc nút +/− để zoom.">?</span>
       <span class="sp"></span>
       <span class="muted" id="tl-info"></span>
       <span class="seg"><button id="zoom-out">−</button><button id="zoom-reset">reset</button><button id="zoom-in">+</button></span>
@@ -610,7 +657,7 @@ function getHtml(): string {
 
   <div class="grid">
     <div class="card">
-      <h2>Files touched
+      <h2>Files touched <span class="help" data-tip="Treemap các file Claude đã đọc/sửa. Mỗi ô = 1 file, gom theo thư mục (viền + màu). DIỆN TÍCH ô = số lần đụng (chế độ 'touches') hoặc số dòng thêm/xoá (chế độ 'lines'). Góc phải mỗi ô: trạng thái git (M/A/D). Click = mở file, Shift+click = hiện trong Explorer. Chỉ file được Read/Edit/Write mới hiện — Bash thuần thì không.">?</span>
         <span class="sp" style="flex:1"></span>
         <span class="seg">
           <button id="m-touch" class="on">touches</button>
@@ -622,15 +669,19 @@ function getHtml(): string {
     </div>
     <div style="display:flex; flex-direction:column; gap:14px;">
       <div class="card">
-        <h2>Cost & tokens</h2>
+        <h2>Cost & tokens <span class="help" data-tip="Chi phí ước tính của session, tính từ token đã dùng nhân đơn giá theo model. output/input = token sinh ra/nhận vào. cache write/read = token ghi/đọc từ prompt cache (rẻ hơn nhiều). Đây là ƯỚC TÍNH theo bảng giá tham khảo, không phải hóa đơn thật.">?</span></h2>
         <div id="cost"></div>
       </div>
       <div class="card">
-        <h2>Tool usage</h2>
+        <h2>Models & agents <span class="help" data-tip="Model nào đang thực thi và subagent nào được spawn. 'models' = các model xuất hiện trong session (kèm số message + output token). 'subagents' = các agent con Claude gọi qua tool Task (vd Explore, general-purpose); chấm xanh nhấp nháy = đang chạy. side-msgs = số message chạy trong nhánh subagent.">?</span></h2>
+        <div id="agents"></div>
+      </div>
+      <div class="card">
+        <h2>Tool usage <span class="help" data-tip="Tổng số lần mỗi loại tool được gọi trong session (Read, Edit, Bash, Grep, Task...). Thanh dài = dùng nhiều.">?</span></h2>
         <div class="tools" id="tools"></div>
       </div>
       <div class="card">
-        <h2>Activity <span class="sp" style="flex:1"></span>
+        <h2>Activity <span class="help" data-tip="Dòng thời gian chi tiết từng tool call (mới nhất trên cùng): giờ gọi, tên tool, thời gian chạy, và mục tiêu (file/lệnh/pattern). Dùng dropdown để lọc theo 1 tool.">?</span><span class="sp" style="flex:1"></span>
           <select id="filter" title="Lọc theo tool"><option value="">all tools</option></select>
         </h2>
         <div class="feed" id="feed"></div>
@@ -703,7 +754,13 @@ function renderTreemap(st){
   const legend=document.getElementById('tm-legend');
   const W=svg.clientWidth||600, H=460; svg.setAttribute('viewBox','0 0 '+W+' '+H);
   const root=buildTree(st.files);
-  if(!root.children.length){ legend.innerHTML='<span>Chưa có file nào ('+(metric==='lines'?'chưa có dòng thay đổi':'')+')</span>'; return; }
+  if(!root.children.length){
+    const ns0='http://www.w3.org/2000/svg'; const t=document.createElementNS(ns0,'text');
+    t.setAttribute('x',W/2); t.setAttribute('y',H/2); t.setAttribute('text-anchor','middle');
+    t.setAttribute('fill','var(--vscode-descriptionForeground)'); t.setAttribute('font-size','12');
+    t.textContent = metric==='lines' ? 'Chưa có dòng nào được thêm/xoá' : 'Chưa có file nào được đọc/sửa (Claude mới chạy Bash?)';
+    svg.appendChild(t);
+    legend.innerHTML='<span>Ô sẽ xuất hiện khi Claude Read/Edit/Write file</span>'; return; }
   const out=[]; layoutTree(root,0,0,W,H,0,out);
   const ns='http://www.w3.org/2000/svg';
   for(const cell of out){ const {r,node}=cell;
@@ -795,6 +852,28 @@ function renderFeed(activity){
     ev.innerHTML='<span class="t">'+hhmm(a.ts)+'</span><span class="k">'+a.tool+'</span><span class="dur">'+dur(a.durationMs)+'</span><span class="d">'+escapeHtml(a.detail)+'</span>';
     el.appendChild(ev); }
 }
+function renderAgents(st){
+  const el=document.getElementById('agents'); el.innerHTML='';
+  const models=st.models||[], agents=st.agents||[];
+  // models
+  if(models.length){
+    const wrap=document.createElement('div'); wrap.style.marginBottom='8px';
+    wrap.innerHTML='<div class="muted" style="margin-bottom:4px">models</div>'+
+      models.map(m=>'<div style="display:flex;justify-content:space-between;gap:8px"><span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:'+colorForTool(m.name)+'"></i>'+m.name+'</span><span class="muted">'+m.messages+' msg · '+fmt(m.output)+' out</span></div>').join('');
+    el.appendChild(wrap);
+  }
+  // agents (subagents spawned via Task)
+  const aw=document.createElement('div');
+  if(agents.length){
+    aw.innerHTML='<div class="muted" style="margin-bottom:4px">subagents ('+(st.sidechainMsgs||0)+' side-msgs)</div>'+
+      agents.map(a=>'<div class="ev" style="padding:2px 0"><span class="k" style="width:auto">'+
+        (a.running?'<span class="pill running" style="padding:0 6px"><span class="dot"></span></span> ':'')+a.type+
+        '</span><span class="c" style="width:auto;margin:0 6px">×'+a.count+'</span><span class="d">'+escapeHtml(a.lastDesc||'')+'</span></div>').join('');
+  } else {
+    aw.innerHTML='<div class="muted">Chưa spawn subagent nào (Task). Model chính: '+(st.model||'?')+'</div>';
+  }
+  el.appendChild(aw);
+}
 function renderCost(st){
   const t=st.tokens, el=document.getElementById('cost');
   el.innerHTML =
@@ -835,7 +914,7 @@ function render(st){
   document.getElementById('updated').textContent='cập nhật '+hhmm(st.updatedAt);
   renderSessions(st);
   if(st.error) return;
-  renderStats(st); renderCost(st); renderTimeline(st); renderTreemap(st); renderTools(st.tools); renderFilter(st); renderFeed(st.activity);
+  renderStats(st); renderCost(st); renderAgents(st); renderTimeline(st); renderTreemap(st); renderTools(st.tools); renderFilter(st); renderFeed(st.activity);
 }
 
 // ---- controls --------------------------------------------------------------
@@ -848,6 +927,24 @@ document.getElementById('zoom-in').addEventListener('click', ()=>{ zoom=Math.min
 document.getElementById('zoom-out').addEventListener('click', ()=>{ zoom=Math.max(1,zoom/1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-reset').addEventListener('click', ()=>{ zoom=1; if(last) renderTimeline(last); });
 document.querySelector('.tl-wrap').addEventListener('wheel', e=>{ if(e.ctrlKey||e.metaKey){ e.preventDefault(); zoom=Math.min(20,Math.max(1, zoom*(e.deltaY<0?1.2:0.83))); if(last) renderTimeline(last); } }, {passive:false});
+
+// ---- click-to-show help tooltips ------------------------------------------
+const tip=document.getElementById('tip');
+function hideTip(){ tip.style.display='none'; }
+document.addEventListener('click', e=>{
+  const h=e.target.closest?.('.help');
+  if(h){ e.stopPropagation();
+    if(tip.style.display==='block' && tip.dataset.for===h.dataset.tip){ hideTip(); return; }
+    tip.textContent=h.dataset.tip||''; tip.dataset.for=h.dataset.tip||''; tip.style.display='block';
+    const r=h.getBoundingClientRect(); let x=r.left, y=r.bottom+6;
+    const tw=tip.offsetWidth, th=tip.offsetHeight;
+    if(x+tw>window.innerWidth-8) x=window.innerWidth-tw-8;
+    if(y+th>window.innerHeight-8) y=r.top-th-6;
+    tip.style.left=Math.max(8,x)+'px'; tip.style.top=Math.max(8,y)+'px';
+  } else { hideTip(); }
+});
+window.addEventListener('resize', hideTip);
+window.addEventListener('scroll', hideTip, true);
 
 window.addEventListener('message', e=>{ if(e.data?.type==='state'){ last=e.data.state; render(last); } });
 window.addEventListener('resize', ()=>{ if(last){ renderTimeline(last); renderTreemap(last); } });
