@@ -2,6 +2,13 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.2] - 2026-07-16
+- Redesigned UI/UX of **Claude Task Monitor**:
+  - Grouped **Activity feed** by user prompt/turn into collapsible blocks with a timeline stem line on the left.
+  - Extracted and stored actual user prompt text to display as a preview on the turn headers and timeline vertical bar tooltips.
+  - Added a **Cache Hit Rate progress bar** inside the Cost card to visualize Claude's Prompt Caching efficiency (cached vs non-cached ratio).
+  - Cleaned up layout, spacing, and styling of the overview grid.
+
 ## [0.2.1] - 2026-07-16
 - Improved **Claude Task Monitor** UI layout & compactness:
   - Repositioned **Cost & tokens**, **Models & agents**, and **Overview** to the top in a responsive grid.

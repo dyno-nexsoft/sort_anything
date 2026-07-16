@@ -136,7 +136,7 @@ interface MonitorState {
     files: FileStat[];
     tools: { name: string; count: number }[];
     activity: ActivityItem[];
-    promptMarks: number[];               // timestamps of user prompts
+    promptMarks: any[];               // user prompts (timestamps or {ts, text} objects)
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
     costUsd: number;
     status: { kind: 'running' | 'thinking' | 'idle' | 'waiting'; label: string; tool?: string };
@@ -164,6 +164,18 @@ function toTime(v: unknown): number {
 function shortName(name: string): string {
     return name.length > 80 ? '…' + name.slice(-77) : name;
 }
+function extractPromptText(content: any): string {
+    if (typeof content === 'string') {
+        return content;
+    }
+    if (Array.isArray(content)) {
+        const textObj = content.find((c: any) => c.type === 'text');
+        if (textObj && textObj.text) {
+            return String(textObj.text);
+        }
+    }
+    return '';
+}
 
 // ---------------------------------------------------------------------------
 // Incremental, stateful transcript aggregator
@@ -186,7 +198,7 @@ class TranscriptAggregator {
     private activity: ActivityItem[] = [];
     private activityById = new Map<string, ActivityItem>();
     private toolStart = new Map<string, { ts: number; file?: string }>();
-    private promptMarks: number[] = [];
+    private promptMarks: any[] = [];
     tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
     // model + subagent tracking
@@ -313,10 +325,9 @@ class TranscriptAggregator {
             }
             // a genuine user prompt (typed text, not a tool result)
             if (!isToolResult && ts && o.promptSource !== 'hook') {
-                const hasText = typeof content === 'string'
-                    ? content.trim().length > 0
-                    : Array.isArray(content) && content.some((c: any) => c.type === 'text' || c.type === 'image');
-                if (hasText) { this.promptMarks.push(ts); }
+                const text = extractPromptText(content);
+                const hasText = text.trim().length > 0 || (Array.isArray(content) && content.some((c: any) => c.type === 'image'));
+                if (hasText) { this.promptMarks.push({ ts, text: text.trim() }); }
             }
         }
     }
@@ -674,6 +685,12 @@ function getHtml(): string {
   #tip { position: fixed; z-index: 1000; max-width: 300px; padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45;
     background: var(--vscode-editorHoverWidget-background, #252526); color: var(--vscode-editorHoverWidget-foreground, #ccc);
     border: 1px solid var(--vscode-editorHoverWidget-border, rgba(128,128,128,.4)); box-shadow: 0 4px 14px rgba(0,0,0,.4); display: none; }
+  .turn { margin-bottom: 12px; border-left: 2px solid var(--vscode-panel-border, rgba(128,128,128,.3)); padding-left: 10px; }
+  .turn-header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; font-weight: 600; color: var(--vscode-foreground); }
+  .turn-num { color: var(--vscode-textLink-foreground, #3794ff); font-size: 11px; text-transform: uppercase; font-weight: 700; flex: none; }
+  .turn-time { color: var(--vscode-descriptionForeground); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+  .turn-text { color: var(--vscode-foreground); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-weight: normal; opacity: 0.85; }
+  .turn-body { display: flex; flex-direction: column; gap: 3px; }
 </style>
 </head>
 <body>
@@ -865,11 +882,14 @@ function renderTimeline(st){
   const X=ts=> (min===max? W/2 : ((ts-min)/span)*(W-6));
   const ns='http://www.w3.org/2000/svg';
   // prompt markers
-  for(const pm of (st.promptMarks||[])){ if(pm<min||pm>max) continue;
-    const ln=document.createElementNS(ns,'line'); const x=X(pm);
+  for(const pm of (st.promptMarks||[])){
+    const pmTs = typeof pm === 'object' && pm !== null ? pm.ts : pm;
+    const pmText = typeof pm === 'object' && pm !== null ? pm.text : '';
+    if(pmTs<min||pmTs>max) continue;
+    const ln=document.createElementNS(ns,'line'); const x=X(pmTs);
     ln.setAttribute('x1',x); ln.setAttribute('x2',x); ln.setAttribute('y1',0); ln.setAttribute('y2',H);
     ln.setAttribute('stroke','var(--vscode-descriptionForeground)'); ln.setAttribute('stroke-dasharray','2,3'); ln.setAttribute('stroke-opacity','0.6');
-    ln.innerHTML='<title>user prompt '+hhmm(pm)+'</title>'; svg.appendChild(ln); }
+    ln.innerHTML='<title>user prompt '+hhmm(pmTs)+(pmText ? ': '+escapeHtml(pmText.slice(0, 100)) : '')+'</title>'; svg.appendChild(ln); }
   // bars, width by duration
   for(const a of evs){ const x=X(a.ts);
     let w=3; if(a.durationMs>0){ w=Math.max(3, (a.durationMs/span)*(W-6)); }
@@ -894,12 +914,101 @@ function renderTools(tools){
     row.innerHTML='<span class="n" title="'+escapeHtml(t.name)+'">'+t.name+'</span><div class="bar-wrap"><div class="bar" style="width:'+(t.count/max*100)+'%;background:'+colorForTool(t.name)+'"></div></div><span class="c">'+t.count+'</span>';
     el.appendChild(row); }
 }
-function renderFeed(activity){
+function renderFeed(st){
   const el=document.getElementById('feed'); el.innerHTML='';
-  for(const a of activity){ if(filterTool && a.tool!==filterTool) continue;
-    const ev=document.createElement('div'); ev.className='ev';
-    ev.innerHTML='<span class="t">'+hhmm(a.ts)+'</span><span class="k">'+a.tool+'</span><span class="dur">'+dur(a.durationMs)+'</span><span class="d">'+escapeHtml(a.detail)+'</span>';
-    el.appendChild(ev); }
+  if(!st) return;
+  const activity = st.activity || [];
+  const prompts = (st.promptMarks || []).map(p => typeof p === 'object' && p !== null ? p : { ts: p, text: '' }).sort((a,b)=>a.ts-b.ts);
+  const sortedActivity = activity.filter(a => a.ts > 0).sort((a,b)=>a.ts-b.ts);
+
+  // Group tool calls by prompt turns
+  const groups = [];
+  const preCalls = [];
+
+  for (const call of sortedActivity) {
+    if (filterTool && call.tool !== filterTool) continue;
+    
+    let promptIdx = -1;
+    for (let i = 0; i < prompts.length; i++) {
+      if (prompts[i].ts <= call.ts) {
+        promptIdx = i;
+      } else {
+        break;
+      }
+    }
+    
+    if (promptIdx === -1) {
+      preCalls.push(call);
+    } else {
+      if (!groups[promptIdx]) {
+        groups[promptIdx] = { prompt: prompts[promptIdx], calls: [] };
+      }
+      groups[promptIdx].calls.push(call);
+    }
+  }
+
+  // Ensure all prompts are represented if no filter is active
+  if (!filterTool) {
+    for (let i = 0; i < prompts.length; i++) {
+      if (!groups[i]) {
+        groups[i] = { prompt: prompts[i], calls: [] };
+      }
+    }
+  }
+
+  // Render groups in descending order (newest prompt turn on top)
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    if (!g) continue;
+    
+    // Create turn block
+    const turnDiv = document.createElement('div');
+    turnDiv.className = 'turn';
+    
+    const pText = g.prompt.text || 'User Prompt';
+    const pTime = hhmm(g.prompt.ts);
+    
+    let callsHtml = '';
+    for (const a of g.calls) {
+      callsHtml += '<div class="ev">' +
+        '<span class="t">' + hhmm(a.ts) + '</span>' +
+        '<span class="k" style="color:' + colorForTool(a.tool) + '">' + a.tool + '</span>' +
+        '<span class="dur">' + dur(a.durationMs) + '</span>' +
+        '<span class="d">' + escapeHtml(a.detail) + '</span>' +
+      '</div>';
+    }
+    
+    turnDiv.innerHTML = 
+      '<div class="turn-header" title="' + escapeHtml(pText) + '">' +
+        '<span class="turn-num">Turn #' + (i + 1) + '</span>' +
+        '<span class="turn-time">' + pTime + '</span>' +
+        '<span class="turn-text">' + escapeHtml(pText) + '</span>' +
+      '</div>' +
+      '<div class="turn-body">' + (callsHtml || '<div class="muted" style="font-style:italic;padding-left:12px;">Không gọi tool nào</div>') + '</div>';
+      
+    el.appendChild(turnDiv);
+  }
+
+  // Render pre-session calls if any
+  if (preCalls.length > 0) {
+    const preDiv = document.createElement('div');
+    preDiv.className = 'turn';
+    let callsHtml = '';
+    for (const a of preCalls) {
+      callsHtml += '<div class="ev">' +
+        '<span class="t">' + hhmm(a.ts) + '</span>' +
+        '<span class="k" style="color:' + colorForTool(a.tool) + '">' + a.tool + '</span>' +
+        '<span class="dur">' + dur(a.durationMs) + '</span>' +
+        '<span class="d">' + escapeHtml(a.detail) + '</span>' +
+      '</div>';
+    }
+    preDiv.innerHTML = 
+      '<div class="turn-header">' +
+        '<span class="turn-num">Khởi tạo</span>' +
+      '</div>' +
+      '<div class="turn-body">' + callsHtml + '</div>';
+    el.appendChild(preDiv);
+  }
 }
 function renderAgents(st){
   const el=document.getElementById('agents'); el.innerHTML='';
@@ -925,10 +1034,29 @@ function renderAgents(st){
 }
 function renderCost(st){
   const t=st.tokens, el=document.getElementById('cost');
+  const totalInput = t.input + t.cacheWrite + t.cacheRead;
+  const hitRate = totalInput > 0 ? (t.cacheRead / totalInput * 100) : 0;
+  
+  let cacheBarHtml = '';
+  if (totalInput > 0) {
+    cacheBarHtml = 
+      '<div style="margin-top: 8px; margin-bottom: 4px;">' +
+        '<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">' +
+          '<span class="muted">Cache Hit Rate</span>' +
+          '<span style="font-weight: 600; color: var(--vscode-charts-green, #3fb950);">' + hitRate.toFixed(1) + '%</span>' +
+        '</div>' +
+        '<div style="height: 6px; border-radius: 3px; background: rgba(128,128,128,.2); display: flex; overflow: hidden;">' +
+          '<div style="width: ' + hitRate + '%; background: var(--vscode-charts-green, #3fb950);"></div>' +
+          '<div style="width: ' + (100 - hitRate) + '%; background: var(--vscode-charts-blue, #3794ff);"></div>' +
+        '</div>' +
+      '</div>';
+  }
+
   el.innerHTML =
     '<div style="font-size:22px;font-weight:700">$'+st.costUsd.toFixed(3)+'</div>'+
     '<div class="muted" style="margin-bottom:6px">ước tính · '+(st.model||'?')+'</div>'+
-    row('output', t.output) + row('input', t.input) + row('cache write', t.cacheWrite) + row('cache read', t.cacheRead);
+    row('output', t.output) + row('input', t.input) + row('cache write', t.cacheWrite) + row('cache read', t.cacheRead) +
+    cacheBarHtml;
   function row(l,v){ return '<div style="display:flex;justify-content:space-between"><span class="muted">'+l+'</span><span>'+fmt(v)+'</span></div>'; }
 }
 function renderStats(st){
@@ -967,12 +1095,12 @@ function render(st){
   document.getElementById('updated').textContent='cập nhật '+hhmm(st.updatedAt);
   renderSessions(st);
   if(st.error) return;
-  renderStats(st); renderCost(st); renderAgents(st); renderTimeline(st); renderAgentGraph(st); renderFilesList(st); renderTools(st.tools); renderFilter(st); renderFeed(st.activity);
+  renderStats(st); renderCost(st); renderAgents(st); renderTimeline(st); renderAgentGraph(st); renderFilesList(st); renderTools(st.tools); renderFilter(st); renderFeed(st);
 }
 
 // ---- controls --------------------------------------------------------------
 document.getElementById('session').addEventListener('change', e=> vscode.postMessage({type:'selectSession', file:e.target.value}));
-document.getElementById('filter').addEventListener('change', e=>{ filterTool=e.target.value; if(last) renderFeed(last.activity); });
+document.getElementById('filter').addEventListener('change', e=>{ filterTool=e.target.value; if(last) renderFeed(last); });
 document.getElementById('zoom-in').addEventListener('click', ()=>{ zoom=Math.min(20,zoom*1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-out').addEventListener('click', ()=>{ zoom=Math.max(1,zoom/1.5); if(last) renderTimeline(last); });
 document.getElementById('zoom-reset').addEventListener('click', ()=>{ zoom=1; if(last) renderTimeline(last); });
