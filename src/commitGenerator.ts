@@ -184,25 +184,34 @@ async function callOllama(prompt: string, systemPrompt: string, overrideModel?: 
 function cleanCommitMessage(msg: string): string {
     let cleaned = msg.trim();
     
-    // Extract content from a code block if present
+    // 1. Extract content from a code block if present
     const codeBlockRegex = /```[a-zA-Z]*\r?\n([\s\S]*?)\r?\n```/;
     const match = cleaned.match(codeBlockRegex);
     if (match && match[1]) {
-        return match[1].trim();
-    }
-    
-    // Fallback: inline code block
-    const inlineCodeBlockRegex = /```([\s\S]*?)```/;
-    const inlineMatch = cleaned.match(inlineCodeBlockRegex);
-    if (inlineMatch && inlineMatch[1]) {
-        return inlineMatch[1].trim();
+        cleaned = match[1].trim();
+    } else {
+        // Fallback: inline code block or unclosed block
+        const inlineCodeBlockRegex = /```([\s\S]*?)```/;
+        const inlineMatch = cleaned.match(inlineCodeBlockRegex);
+        if (inlineMatch && inlineMatch[1]) {
+            cleaned = inlineMatch[1].trim();
+        } else {
+            // Strip unclosed backticks just in case
+            cleaned = cleaned.replace(/^```[a-zA-Z]*\s*/, '');
+            cleaned = cleaned.replace(/\s*```$/, '');
+        }
     }
 
-    // Strip leading/trailing backticks just in case
-    cleaned = cleaned.replace(/^```[a-zA-Z]*\s+/, '');
-    cleaned = cleaned.replace(/\s+```$/, '');
-    
-    return cleaned.trim();
+    // 2. Remove conversational prefixes and git commit commands
+    cleaned = cleaned.replace(/^(here is.*:|suggested.*:|commit( message)?:|git commit -m\s*)/i, '').trim();
+
+    // 3. Strip surrounding quotes (double or single)
+    cleaned = cleaned.replace(/^["']([\s\S]*?)["']$/, '$1').trim();
+
+    // 4. Strip surrounding markdown bold (**) just in case
+    cleaned = cleaned.replace(/^\*\*([\s\S]*?)\*\*$/, '$1').trim();
+
+    return cleaned;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +292,37 @@ async function runGeneration(
     }
 
     if (!diff) {
-        vscode.window.showWarningMessage(
-            'Dyno Extension: No staged changes found. Please run "git add" first.'
-        );
-        return;
+        // Check if there are unstaged changes
+        let hasUnstaged = false;
+        try {
+            const status = execSync('git status --porcelain', { cwd: selectedRepo.rootUri.fsPath, encoding: 'utf-8' });
+            hasUnstaged = status.trim().length > 0;
+        } catch (err) {}
+
+        if (hasUnstaged) {
+            const action = await vscode.window.showInformationMessage(
+                'No staged changes found. Would you like to stage all changes and generate a commit message?',
+                'Yes', 'No'
+            );
+            if (action === 'Yes') {
+                try {
+                    execSync('git add .', { cwd: selectedRepo.rootUri.fsPath });
+                    diff = getGitDiff(selectedRepo.rootUri.fsPath);
+                } catch (err) {
+                    vscode.window.showErrorMessage('Failed to stage changes.');
+                    return;
+                }
+            } else {
+                return; // User declined to stage
+            }
+        }
+        
+        if (!diff) {
+            vscode.window.showWarningMessage(
+                'Dyno Extension: No changes found to commit.'
+            );
+            return;
+        }
     }
 
     const inputBox = selectedRepo.inputBox;
@@ -372,7 +408,7 @@ async function getOllamaModels(endpoint: string): Promise<vscode.QuickPickItem[]
 let sessionGeminiModel: string | undefined;
 let sessionOllamaModel: string | undefined;
 
-export async function generateCommitMessage(context: vscode.ExtensionContext, scm?: any): Promise<void> {
+export async function changeAiProvider(context: vscode.ExtensionContext): Promise<void> {
     const config = vscode.workspace.getConfiguration('dynoExtension');
     const currentProvider = context.globalState.get<string>('lastAiProvider', 'gemini');
     
@@ -380,19 +416,16 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
     const geminiModel = context.globalState.get<string>('lastGeminiModel', 'gemini-3.5-flash');
     const ollamaModel = context.globalState.get<string>('lastOllamaModel', 'llama3');
     
-    const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
-    const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
-
     type ActionItem = vscode.QuickPickItem & { action: 'gemini' | 'ollama' | 'settings' };
 
     const items: ActionItem[] = [
         {
-            label: '$(sparkle) Generate Commit Message with Gemini',
+            label: '$(sparkle) Use Gemini Provider',
             description: geminiModel + (currentProvider === 'gemini' ? '  $(check) current' : ''),
             action: 'gemini',
         },
         {
-            label: '$(hubot) Generate Commit Message with Ollama',
+            label: '$(hubot) Use Ollama Provider',
             description: ollamaModel + (currentProvider === 'ollama' ? '  $(check) current' : ''),
             action: 'ollama',
         },
@@ -404,8 +437,8 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
     ];
 
     const picked = await vscode.window.showQuickPick(items, {
-        title: 'Dyno Extension — Generate Commit Message',
-        placeHolder: 'Select AI provider to generate commit message',
+        title: 'Dyno Extension — Change AI Provider',
+        placeHolder: 'Select the default AI provider to generate commit messages',
         matchOnDescription: true,
     });
 
@@ -417,6 +450,91 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
     }
 
     if (picked.action === 'gemini') {
+        const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
+        if (!geminiApiKey) {
+            const action = await vscode.window.showErrorMessage('Dyno Extension: Gemini API Key is missing.', 'Open Settings');
+            if (action === 'Open Settings') vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
+            return;
+        }
+        let modelItems: vscode.QuickPickItem[];
+        try {
+            modelItems = await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: 'Dyno Extension: Fetching model list from Gemini...', cancellable: false },
+                () => getGeminiModels(geminiApiKey)
+            );
+        } catch (err) {
+            logError(err, 'Failed to fetch models from Gemini');
+            vscode.window.showErrorMessage(`Dyno Extension: ${(err as Error).message}`);
+            return;
+        }
+
+        let targetModel = '';
+        if (modelItems.length === 1) {
+            targetModel = modelItems[0].label;
+        } else {
+            const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                title: 'Dyno Extension — Select Gemini Model',
+                placeHolder: 'Select a Gemini model',
+                matchOnDescription: true,
+            });
+            if (!pickedModel) return;
+            targetModel = pickedModel.label;
+        }
+
+        sessionGeminiModel = targetModel;
+        await context.globalState.update('lastGeminiModel', targetModel);
+        await context.globalState.update('lastAiProvider', 'gemini');
+        vscode.window.showInformationMessage(`Dyno Extension: AI Provider set to Gemini (${targetModel}).`);
+
+    } else if (picked.action === 'ollama') {
+        const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
+        let modelItems: vscode.QuickPickItem[];
+        try {
+            modelItems = await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: 'Dyno Extension: Fetching model list from Ollama...', cancellable: false },
+                () => getOllamaModels(ollamaEndpoint)
+            );
+        } catch (err) {
+            logError(err, 'Failed to fetch models from Ollama');
+            vscode.window.showErrorMessage(`Dyno Extension: ${(err as Error).message}`);
+            return;
+        }
+
+        let targetModel = '';
+        if (modelItems.length === 1) {
+            targetModel = modelItems[0].label;
+        } else {
+            const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                title: 'Dyno Extension — Select Ollama Model',
+                placeHolder: 'Select an available local model',
+                matchOnDescription: true,
+            });
+            if (!pickedModel) return;
+            targetModel = pickedModel.label;
+        }
+
+        sessionOllamaModel = targetModel;
+        await context.globalState.update('lastOllamaModel', targetModel);
+        await context.globalState.update('lastAiProvider', 'ollama');
+        vscode.window.showInformationMessage(`Dyno Extension: AI Provider set to Ollama (${targetModel}).`);
+    }
+}
+
+export async function generateCommitMessage(context: vscode.ExtensionContext, scm?: any): Promise<void> {
+    const config = vscode.workspace.getConfiguration('dynoExtension');
+    const currentProvider = context.globalState.get<string>('lastAiProvider', 'gemini');
+    
+    if (!sessionGeminiModel) {
+        sessionGeminiModel = context.globalState.get<string>('lastGeminiModel');
+    }
+    if (!sessionOllamaModel) {
+        sessionOllamaModel = context.globalState.get<string>('lastOllamaModel');
+    }
+    
+    const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
+    const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
+
+    if (currentProvider === 'gemini') {
         if (!geminiApiKey) {
             const action = await vscode.window.showErrorMessage(
                 'Dyno Extension: Gemini API Key is missing.',
@@ -454,24 +572,27 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
                 return;
             }
 
-            const pickedModel = await vscode.window.showQuickPick(modelItems, {
-                title: 'Dyno Extension — Select Gemini Model',
-                placeHolder: 'Select a Gemini model',
-                matchOnDescription: true,
-            });
+            if (modelItems.length === 1) {
+                targetModel = modelItems[0].label;
+            } else {
+                const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                    title: 'Dyno Extension — Select Gemini Model',
+                    placeHolder: 'Select a Gemini model',
+                    matchOnDescription: true,
+                });
 
-            if (!pickedModel) { return; } // Cancelled
+                if (!pickedModel) { return; } // Cancelled
 
-            targetModel = pickedModel.label;
+                targetModel = pickedModel.label;
+            }
             sessionGeminiModel = targetModel;
-            // Save last used model in globalState and update provider in settings
+            // Save last used model in globalState
             await context.globalState.update('lastGeminiModel', targetModel);
         }
 
-        await context.globalState.update('lastAiProvider', 'gemini');
         await runGeneration('gemini', targetModel, scm);
 
-    } else if (picked.action === 'ollama') {
+    } else if (currentProvider === 'ollama') {
         let targetModel = sessionOllamaModel;
 
         if (!targetModel) {
@@ -499,21 +620,24 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
                 return;
             }
 
-            const pickedModel = await vscode.window.showQuickPick(modelItems, {
-                title: 'Dyno Extension — Select Ollama Model',
-                placeHolder: 'Select an available local model',
-                matchOnDescription: true,
-            });
+            if (modelItems.length === 1) {
+                targetModel = modelItems[0].label;
+            } else {
+                const pickedModel = await vscode.window.showQuickPick(modelItems, {
+                    title: 'Dyno Extension — Select Ollama Model',
+                    placeHolder: 'Select an available local model',
+                    matchOnDescription: true,
+                });
 
-            if (!pickedModel) { return; } // Model selection cancelled
+                if (!pickedModel) { return; } // Model selection cancelled
 
-            targetModel = pickedModel.label;
+                targetModel = pickedModel.label;
+            }
             sessionOllamaModel = targetModel;
-            // Save last used model in globalState and update provider in settings
+            // Save last used model in globalState
             await context.globalState.update('lastOllamaModel', targetModel);
         }
 
-        await context.globalState.update('lastAiProvider', 'ollama');
         await runGeneration('ollama', targetModel, scm);
     }
 }

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { sortDocument, sortSelection } from './sorter';
 import { generateBarrelFile } from './barrelGenerator';
-import { generateCommitMessage } from './commitGenerator';
+import { generateCommitMessage, changeAiProvider } from './commitGenerator';
 import { openClaudeMonitor } from './claudeMonitor';
 import { installMonitorHook, uninstallMonitorHook } from './monitorHook';
 import { logInfo } from './utils';
@@ -62,6 +62,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const changeAiProviderDisposable = vscode.commands.registerCommand(
+        'dynoExtension.changeAiProvider',
+        async () => {
+            await changeAiProvider(context);
+        }
+    );
+
     const claudeMonitorDisposable = vscode.commands.registerCommand(
         'dynoExtension.showClaudeMonitor',
         () => openClaudeMonitor(context)
@@ -100,6 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
         sortSelectionDisposable,
         generateBarrelDisposable,
         generateCommitDisposable,
+        changeAiProviderDisposable,
         claudeMonitorDisposable,
         installHookDisposable,
         uninstallHookDisposable

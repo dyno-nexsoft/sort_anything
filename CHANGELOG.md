@@ -2,6 +2,15 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.4] - 2026-07-20
+- **AI Commit Generator Flow Optimizations**:
+  - Implemented a 0-click auto-generation flow that silently uses the previously selected AI provider and model from cache.
+  - Extracted provider switching into a new `Dyno Extension: Change AI Provider` command (available in the SCM overflow menu).
+  - Improved the provider switcher to automatically prompt for model selection right after picking a provider, and auto-selects if only 1 model is available.
+  - Added an auto-stage prompt that allows you to easily `git add .` if you attempt to generate a commit message with unstaged changes.
+  - Significantly enhanced `cleanCommitMessage` algorithm to gracefully handle edge cases (unclosed code blocks, conversational prefixes, quotes, and markdown formatting).
+  - Cleaned up context menu item names using `shortTitle` for a less cluttered UI.
+
 ## [0.2.3] - 2026-07-16
 - Enhanced **Claude Task Monitor** UI/UX layout:
   - Increased the right sidebar width from `320px` to `380px` to give more horizontal space for tool progress bars and activity details.

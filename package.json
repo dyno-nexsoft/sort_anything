@@ -2,7 +2,7 @@
   "name": "dyno-extension",
   "displayName": "Dyno Extension",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -35,7 +35,8 @@
     "onLanguage:ignore",
     "onLanguage:plaintext",
     "onCommand:dynoExtension.generateDartBarrel",
-    "onCommand:dynoExtension.generateCommitMessage"
+    "onCommand:dynoExtension.generateCommitMessage",
+    "onCommand:dynoExtension.changeAiProvider"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -50,13 +51,21 @@
       },
       {
         "command": "dynoExtension.generateDartBarrel",
-        "title": "Generate Dart Barrel File",
+        "title": "Dyno Extension: Generate Dart Barrel File",
+        "shortTitle": "Dyno Extension: Dart Barrel",
         "icon": "$(file-code)"
       },
       {
         "command": "dynoExtension.generateCommitMessage",
-        "title": "Generate Commit Message with AI",
+        "title": "Dyno Extension: Generate Commit Message with AI",
+        "shortTitle": "Dyno Extension: AI Commit",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "dynoExtension.changeAiProvider",
+        "title": "Dyno Extension: Change AI Provider (Commit Message)",
+        "shortTitle": "Dyno Extension: AI Provider",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "dynoExtension.showClaudeMonitor",
@@ -96,6 +105,9 @@
         {
           "command": "dynoExtension.generateCommitMessage",
           "group": "navigation"
+        },
+        {
+          "command": "dynoExtension.changeAiProvider"
         },
         {
           "command": "dynoExtension.showClaudeMonitor",

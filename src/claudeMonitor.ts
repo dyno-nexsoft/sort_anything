@@ -783,9 +783,28 @@ function hhmm(ts){ if(!ts) return ''; const d=new Date(ts); return d.toLocaleTim
 function dur(ms){ if(ms<0) return ''; if(ms<1000) return ms+'ms'; if(ms<60000) return (ms/1000).toFixed(1)+'s'; return Math.round(ms/60000)+'m'; }
 function escapeHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
-const palette = ['#3794ff','#3fb950','#d29922','#a371f7','#f78166','#56d4bb','#db61a2','#e3b341'];
-function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
-function colorForTool(name){ return palette[hashStr(name) % palette.length]; }
+const toolColors = {
+  'read': '#3794ff',            // Blue
+  'edit': '#d29922',            // Amber/Orange
+  'write': '#f78166',           // Coral
+  'bash': '#a371f7',            // Purple
+  'grep': '#db61a2',            // Pink
+  'glob': '#56d4bb',            // Teal
+  'task': '#3fb950',            // Green
+  'agent': '#3fb950',           // Green
+  'askuserquestion': '#e3b341'  // Yellow/Gold
+};
+function colorForTool(name){
+  if (!name) return '#8b949e';
+  const norm = name.toLowerCase().trim();
+  if (toolColors[norm]) return toolColors[norm];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  const hue = h % 360;
+  return 'hsl(' + hue + ', 70%, 60%)';
+}
 function gitColor(gs){ return gs==='M'?'#d29922':(gs==='A'||gs==='?')?'#3fb950':gs==='D'?'#f85149':'var(--vscode-descriptionForeground)'; }
 
 // ---- hub-and-spoke agent orchestration diagram -----------------------------
