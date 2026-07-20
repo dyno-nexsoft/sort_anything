@@ -127,4 +127,4 @@ See the [CHANGELOG.md](CHANGELOG.md) for all release notes and version history.
 
 ---
 
-_Created with ❤️ by [Dyno Nexsoft](https://github.com/dyno-nexsoft)_ | [View Source on GitHub](https://github.com/dyno-nexsoft/sort_anything)
+_Created with ❤️ by [Dyno Nexsoft](https://github.com/dyno-nexsoft)_ | [View Source on GitHub](https://github.com/dyno-nexsoft/dyno_extension)
