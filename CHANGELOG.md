@@ -2,6 +2,15 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.6]
+- Added 3 Custom HTML Tabs (Opencode, Claude, Gemini) in AI Sidebar Terminal for quick switching.
+- Modified Sidebar Terminal to act as a dynamic CLI switcher that changes the running process based on selected tab.
+- Added Extension Settings configuration for CLI Commands (`dynoExtension.terminal.opencodeCommand`, etc.).
+- Improved Terminal container UI, hiding reload and close buttons for a cleaner interface.
+- Fixed Terminal resize behavior to be responsive using `ResizeObserver` API.
+- Fixed Terminal paste issues (added native right-click and `Ctrl+V` interception).
+- Reorganized and properly grouped AI Provider configurations (`dynoExtension.ai.*`) in Extension Settings.
+
 ## [0.2.5] - 2026-07-22
 - Added **Opencode Terminal Sidebar Tab**:
   - Implemented a custom Activity Bar View Container (`$(sparkle)` icon).

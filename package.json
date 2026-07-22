@@ -2,7 +2,7 @@
   "name": "dyno-extension",
   "displayName": "Dyno Extension",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -108,12 +108,6 @@
         },
         {
           "command": "dynoExtension.changeAiProvider"
-        },
-        {
-          "command": "dynoExtension.showClaudeMonitor"
-        },
-        {
-          "command": "dynoExtension.generateCommitMessage"
         }
       ]
     },
@@ -145,15 +139,35 @@
     "configuration": {
       "title": "Dyno Extension",
       "properties": {
-        "dynoExtension.geminiApiKey": {
+        "dynoExtension.ai.geminiApiKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Gemini API Key. Lấy tại [Google AI Studio](https://aistudio.google.com/apikey)."
+          "markdownDescription": "Gemini API Key. Lấy tại [Google AI Studio](https://aistudio.google.com/apikey).",
+          "order": 1
         },
-        "dynoExtension.ollamaEndpoint": {
+        "dynoExtension.ai.ollamaEndpoint": {
           "type": "string",
           "default": "http://localhost:11434",
-          "description": "Endpoint của Ollama server."
+          "description": "Endpoint của Ollama server.",
+          "order": 2
+        },
+        "dynoExtension.terminal.opencodeCommand": {
+          "type": "string",
+          "default": "opencode",
+          "description": "Command to run for the Opencode tab in the AI sidebar terminal.",
+          "order": 3
+        },
+        "dynoExtension.terminal.claudeCommand": {
+          "type": "string",
+          "default": "claude",
+          "description": "Command to run for the Claude tab in the AI sidebar terminal.",
+          "order": 4
+        },
+        "dynoExtension.terminal.geminiCommand": {
+          "type": "string",
+          "default": "gemini",
+          "description": "Command to run for the Gemini tab in the AI sidebar terminal.",
+          "order": 5
         }
       }
     }

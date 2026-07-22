@@ -120,7 +120,7 @@ async function getGeminiModels(apiKey: string): Promise<vscode.QuickPickItem[]> 
 
 async function callGemini(prompt: string, systemInstruction: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('dynoExtension');
-    const apiKey = config.get<string>('geminiApiKey', '').trim();
+    const apiKey = config.get<string>('ai.geminiApiKey', '').trim();
     const model = (overrideModel || 'gemini-3.5-flash').trim();
 
     if (!apiKey) {
@@ -180,7 +180,7 @@ async function callGemini(prompt: string, systemInstruction: string, overrideMod
 
 async function callOllama(prompt: string, systemPrompt: string, overrideModel?: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('dynoExtension');
-    const endpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
+    const endpoint = config.get<string>('ai.ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
     const model = (overrideModel || config.get<string>('ollamaModel', 'llama3')).trim();
 
     const url = `${endpoint}/api/generate`;
@@ -482,7 +482,7 @@ export async function changeAiProvider(context: vscode.ExtensionContext): Promis
     }
 
     if (picked.action === 'gemini') {
-        const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
+        const geminiApiKey = config.get<string>('ai.geminiApiKey', '').trim();
         if (!geminiApiKey) {
             const action = await vscode.window.showErrorMessage('Dyno Extension: Gemini API Key is missing.', 'Open Settings');
             if (action === 'Open Settings') vscode.commands.executeCommand('workbench.action.openSettings', 'dynoExtension');
@@ -519,7 +519,7 @@ export async function changeAiProvider(context: vscode.ExtensionContext): Promis
         vscode.window.showInformationMessage(`Dyno Extension: AI Provider set to Gemini (${targetModel}).`);
 
     } else if (picked.action === 'ollama') {
-        const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
+        const ollamaEndpoint = config.get<string>('ai.ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
         let modelItems: vscode.QuickPickItem[];
         try {
             modelItems = await vscode.window.withProgress(
@@ -563,8 +563,8 @@ export async function generateCommitMessage(context: vscode.ExtensionContext, sc
         sessionOllamaModel = context.globalState.get<string>('lastOllamaModel');
     }
     
-    const geminiApiKey = config.get<string>('geminiApiKey', '').trim();
-    const ollamaEndpoint = config.get<string>('ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
+    const geminiApiKey = config.get<string>('ai.geminiApiKey', '').trim();
+    const ollamaEndpoint = config.get<string>('ai.ollamaEndpoint', 'http://localhost:11434').trim().replace(/\/$/, '');
 
     if (currentProvider === 'gemini') {
         if (!geminiApiKey) {
