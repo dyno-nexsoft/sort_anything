@@ -15,6 +15,32 @@ function getGitDiff(cwd: string): string {
     }
 }
 
+function optimizeGitDiff(diff: string): string {
+    const lines = diff.split(/\r?\n/);
+    const optimized: string[] = [];
+    let isDeletedFile = false;
+
+    for (const line of lines) {
+        if (line.startsWith('diff --git ')) {
+            isDeletedFile = false;
+        }
+        if (line.startsWith('deleted file mode ')) {
+            isDeletedFile = true;
+        }
+        
+        if (isDeletedFile) {
+            if (line.startsWith('-') && !line.startsWith('--- ')) {
+                continue; // Skip deleted lines contents
+            }
+            if (line.startsWith('@@ ')) {
+                continue; // Skip line numbers
+            }
+        }
+        optimized.push(line);
+    }
+    return optimized.join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Prompt Builder
 // ---------------------------------------------------------------------------
@@ -33,7 +59,11 @@ function buildPrompt(diff: string): string {
     return `Git diff:
 \`\`\`
 ${diff}
-\`\`\``;
+\`\`\`
+
+---
+Based on the git diff above, write a concise commit message following Conventional Commits format (e.g., feat:, fix:, refactor:).
+Output ONLY the raw commit message text, nothing else. Do not wrap in quotes, backticks, or code blocks.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +359,9 @@ async function runGeneration(
     const label = provider === 'gemini' ? 'Gemini' : 'Ollama';
 
     try {
-        const prompt = buildPrompt(diff);
+        const optimizedDiff = optimizeGitDiff(diff);
+        const prompt = buildPrompt(optimizedDiff);
+        logInfo(`Prompt sent to ${label}:\n${prompt}`);
         
         // Show progress spinner in the bottom right toast notification
         const message = await vscode.window.withProgress(

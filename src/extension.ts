@@ -5,7 +5,7 @@ import { generateCommitMessage, changeAiProvider } from './commitGenerator';
 import { openClaudeMonitor } from './claudeMonitor';
 import { installMonitorHook, uninstallMonitorHook } from './monitorHook';
 import { logInfo } from './utils';
-
+import { OpencodeWebviewProvider } from './opencodeWebview';
 export function activate(context: vscode.ExtensionContext) {
     logInfo('Dyno Extension activated successfully.');
     const sortDocumentDisposable = vscode.commands.registerTextEditorCommand(
@@ -102,6 +102,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const opencodeProvider = new OpencodeWebviewProvider(context.extensionUri);
+    const opencodeDisposable = vscode.window.registerWebviewViewProvider(
+        OpencodeWebviewProvider.viewType,
+        opencodeProvider
+    );
+
     context.subscriptions.push(
         sortDocumentDisposable,
         sortSelectionDisposable,
@@ -110,7 +116,8 @@ export function activate(context: vscode.ExtensionContext) {
         changeAiProviderDisposable,
         claudeMonitorDisposable,
         installHookDisposable,
-        uninstallHookDisposable
+        uninstallHookDisposable,
+        opencodeDisposable
     );
 }
 

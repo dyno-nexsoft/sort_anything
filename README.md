@@ -37,6 +37,13 @@
 - **Git change status integration**: Shows badges (Modified/Added/Deleted/Untracked) and allows clicking files to open or shift-clicking to reveal.
 - **Live hook server**: Installs/uninstalls hooks in `.claude/settings.json` for near-instant webview refreshes.
 
+### 💻 Opencode Terminal
+
+- **Sidebar Integration**: Access `opencode` directly from a dedicated Activity Bar tab (Sparkle icon).
+- **Embedded Webview Terminal**: Full terminal experience embedded within the Sidebar using `xterm.js`.
+- **Quick Controls**: Includes native SVG buttons for `Reload` and `Close` to manage the background process easily.
+- **Smart Resizing**: Automatically handles window resizes for a seamless and responsive layout.
+
 ### 🎯 Dart Barrel File Generator
 
 - **Right-click any folder** in the Explorer → **"Generate Dart Barrel File"**

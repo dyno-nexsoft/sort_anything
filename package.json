@@ -2,7 +2,7 @@
   "name": "dyno-extension",
   "displayName": "Dyno Extension",
   "description": "Sort keys in JSON/YAML/ENV files and generate AI-powered commit messages",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "dyno-nexsoft",
   "author": "Dyno Nexsoft",
   "icon": "icon.png",
@@ -110,8 +110,7 @@
           "command": "dynoExtension.changeAiProvider"
         },
         {
-          "command": "dynoExtension.showClaudeMonitor",
-          "group": "navigation"
+          "command": "dynoExtension.showClaudeMonitor"
         },
         {
           "command": "dynoExtension.generateCommitMessage"
@@ -125,10 +124,27 @@
         "mac": "cmd+alt+m"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opencode-explorer",
+          "title": "Opencode",
+          "icon": "$(sparkle)"
+        }
+      ]
+    },
+    "views": {
+      "opencode-explorer": [
+        {
+          "type": "webview",
+          "id": "opencode.sidebar.view",
+          "name": "Opencode Terminal"
+        }
+      ]
+    },
     "configuration": {
       "title": "Dyno Extension",
       "properties": {
-
         "dynoExtension.geminiApiKey": {
           "type": "string",
           "default": "",
@@ -150,7 +166,10 @@
     "package-to-desktop": "vsce package -o \"%USERPROFILE%\\Desktop\\dyno-extension.vsix\""
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "comment-json": "^4.2.3",
+    "node-pty": "^1.1.0",
     "yaml": "^2.3.1"
   },
   "devDependencies": {

@@ -2,6 +2,15 @@
 
 All notable changes to the "Dyno Extension" extension will be documented in this file.
 
+## [0.2.5] - 2026-07-22
+- Added **Opencode Terminal Sidebar Tab**:
+  - Implemented a custom Activity Bar View Container (`$(sparkle)` icon).
+  - Embedded `xterm.js` Webview that runs `opencode` directly within the workspace folder.
+  - Added a Webview toolbar with native SVG buttons for `Reload` and `Close`.
+  - Auto-resizing support to handle window scale adjustments perfectly.
+  - Graceful "Closed State" UI when the process is terminated.
+  - Custom webkit scrollbars designed to mimic VS Code native scrollbar.
+
 ## [0.2.4] - 2026-07-20
 - **AI Commit Generator Flow Optimizations**:
   - Implemented a 0-click auto-generation flow that silently uses the previously selected AI provider and model from cache.
